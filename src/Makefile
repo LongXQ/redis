@@ -12,8 +12,8 @@
 # Dependencies are stored in the Makefile.dep file. To rebuild this file
 # Just use 'make dep', but this is only needed by developers.
 
-release_hdr := $(shell sh -c './mkreleasehdr.sh')
-uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
+release_hdr := $(shell sh -c './mkreleasehdr.sh')	     # ？？？
+uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not') # 'uname -s' 会得到当前系统的操作系统类型
 OPTIMIZATION?=-O2
 DEPENDENCY_TARGETS=hiredis linenoise lua
 
@@ -47,7 +47,7 @@ ifeq ($(USE_JEMALLOC),yes)
 endif
 
 # Override default settings if possible
--include .make-settings
+-include .make-settings 	# -include 表示包含.make-settings文件或者规则。
 
 FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DEBUG) $(CFLAGS) $(REDIS_CFLAGS)
 FINAL_LDFLAGS=$(LDFLAGS) $(REDIS_LDFLAGS) $(DEBUG)
