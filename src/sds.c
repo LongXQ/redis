@@ -48,6 +48,8 @@
  * You can print the string with printf() as there is an implicit \0 at the
  * end of the string. However the string is binary safe and can contain
  * \0 characters in the middle, as the length is stored in the sds header. */
+
+//创建一个长度为initlen，初始内容为init的sds
 sds sdsnewlen(const void *init, size_t initlen) {
     struct sdshdr *sh;
 
@@ -67,22 +69,31 @@ sds sdsnewlen(const void *init, size_t initlen) {
 
 /* Create an empty (zero length) sds string. Even in this case the string
  * always has an implicit null term. */
+ 
+//创建一个长度为0的sds
 sds sdsempty(void) {
     return sdsnewlen("",0);
 }
 
 /* Create a new sds string starting from a null terminated C string. */
+
+//创建一个新的sds字符串，内容初始化为init指向的开始到空字符结尾的内容
 sds sdsnew(const char *init) {
+	//strlen函数返回的长度不包括字符结尾符'\0'
     size_t initlen = (init == NULL) ? 0 : strlen(init);
     return sdsnewlen(init, initlen);
 }
 
 /* Duplicate an sds string. */
+
+//复制sds
 sds sdsdup(const sds s) {
     return sdsnewlen(s, sdslen(s));
 }
 
 /* Free an sds string. No operation is performed if 's' is NULL. */
+
+//释放sds所占用的内存，包括隐含的额外占用的内存
 void sdsfree(sds s) {
     if (s == NULL) return;
     zfree(s-sizeof(struct sdshdr));
@@ -128,7 +139,7 @@ void sdsclear(sds s) {
  * by sdslen(), but only the free buffer space we have. */
 sds sdsMakeRoomFor(sds s, size_t addlen) {
     struct sdshdr *sh, *newsh;
-    size_t free = sdsavail(s);
+    size_t free = sdsavail(s); //return s->free;
     size_t len, newlen;
 
     if (free >= addlen) return s;
@@ -291,7 +302,7 @@ sds sdscpy(sds s, const char *t) {
     return sdscpylen(s, t, strlen(t));
 }
 
-/* Helper for sdscatlonglong() doing the actual number -> string
+/* Helper for sdscatlonglong() doing the actual number -> string(脢媒脰碌->脳脰路没麓庐碌脛脳陋禄禄)
  * conversion. 's' must point to a string with room for at least
  * SDS_LLSTR_SIZE bytes.
  *
@@ -308,7 +319,7 @@ int sdsll2str(char *s, long long value) {
     v = (value < 0) ? -value : value;
     p = s;
     do {
-        *p++ = '0'+(v%10);
+        *p++ = '0'+(v%10);   //掳脩脢媒脳脰脳陋禄禄鲁脡ASCII脗毛
         v /= 10;
     } while(v);
     if (value < 0) *p++ = '-';
@@ -391,7 +402,7 @@ sds sdscatvprintf(sds s, const char *fmt, va_list ap) {
         va_copy(cpy,ap);
         vsnprintf(buf, buflen, fmt, cpy);
         va_end(cpy);
-        if (buf[buflen-2] != '\0') {
+        if (buf[buflen-2] != '\0') { //脣碌脙梅fmt碌脛鲁陇露脠脰脕脡脵麓贸脫脷buflen-2拢卢脣霉脪脭脌漏鲁盲鲁陇露脠隆拢脌漏鲁盲脦陋脪脭脟掳buflen碌脛脕陆卤露隆拢
             if (buf != staticbuf) zfree(buf);
             buflen *= 2;
             buf = zmalloc(buflen);
@@ -682,7 +693,7 @@ sds *sdssplitlen(const char *s, int len, const char *sep, int seplen, int *count
     int elements = 0, slots = 5, start = 0, j;
     sds *tokens;
 
-    if (seplen < 1 || len < 0) return NULL;
+    if (seplen < 1 || len < 0) return NULL; //露脭脫脷驴脮sds潞脥驴脮碌脛sep拢卢路碌禄脴NULL隆拢
 
     tokens = zmalloc(sizeof(sds)*slots);
     if (tokens == NULL) return NULL;
@@ -824,8 +835,9 @@ sds *sdssplitargs(const char *line, int *argc) {
     *argc = 0;
     while(1) {
         /* skip blanks */
+		//isspace检查字符是不是空字符,换行符这些。
         while(*p && isspace(*p)) p++;
-        if (*p) {
+        if (*p) {			
             /* get a token */
             int inq=0;  /* set to 1 if we are in "quotes" */
             int insq=0; /* set to 1 if we are in 'single quotes' */
@@ -930,7 +942,7 @@ err:
  * characters specified in the 'from' string to the corresponding character
  * in the 'to' array.
  *
- * For instance: sdsmapchars(mystring, "ho", "01", 2)
+ * For instance: sdsmapchars(mystring, "ho", "01", 2) //h-->0,o-->1
  * will have the effect of turning the string "hello" into "0ell1".
  *
  * The function returns the sds string pointer, that is always the same

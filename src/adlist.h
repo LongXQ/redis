@@ -28,24 +28,32 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+ 
+/*通用的双向链表实现*/
+
 #ifndef __ADLIST_H__
 #define __ADLIST_H__
 
 /* Node, List, and Iterator are the only data structures used currently. */
 
+//链表节点
 typedef struct listNode {
     struct listNode *prev;
     struct listNode *next;
     void *value;
 } listNode;
 
+//链表迭代器
 typedef struct listIter {
     listNode *next;
     int direction;
 } listIter;
 
+//链表
 typedef struct list {
+	//链表头结点
     listNode *head;
+	//链表尾结点
     listNode *tail;
     void *(*dup)(void *ptr);
     void (*free)(void *ptr);
@@ -87,7 +95,9 @@ void listRewindTail(list *list, listIter *li);
 void listRotate(list *list);
 
 /* Directions for iterators */
+//从链表头结点开始迭代，相当于正向迭代
 #define AL_START_HEAD 0
+//从链表尾结点开始迭代，相当于反向迭代
 #define AL_START_TAIL 1
 
 #endif /* __ADLIST_H__ */

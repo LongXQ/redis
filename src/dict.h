@@ -32,7 +32,10 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-//哈希表的实现
+ 
+//哈希表的实现，实现了插入，删除，替换，查找，得到随机元素的操作。
+//如果需要增加哈希表的大小，那么哈希表将会以目前使用的两倍内存来增加哈希表的大小。
+//哈希表的冲突用链式法解决
 #include <stdint.h>
 
 #ifndef __DICT_H
@@ -44,6 +47,7 @@
 /* Unused arguments generate annoying warnings... */
 #define DICT_NOTUSED(V) ((void) V)
 
+//条目是一个key-value对。其中value可以为void*，uint64_t，int64_t和double类型。
 typedef struct dictEntry {
     void *key;
     union {
@@ -65,7 +69,12 @@ typedef struct dictType {
 } dictType;
 
 /* This is our hash table structure. Every dictionary has two of this as we
- * implement incremental rehashing, for the old to the new table. */
+ * implement incremental rehashing(渐增式rehash), for the old to the new table. */
+
+/*
+	每个字典有两个哈希表，0号和1号哈希表，这是为了实现渐增式rehash而设计的。
+	redis会逐步地将0号哈希表上的内容rehash到1号哈希表上，直到0号哈希表为空。
+*/
 typedef struct dictht {
     dictEntry **table;
     unsigned long size;
@@ -97,13 +106,19 @@ typedef struct dictIterator {
 typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
 
 /* This is the initial size of every hash table */
+
+/*
+	指的是桶的大小。也就是dictht->table的大小，默认初始有4个桶:table[0],table[1],table[2],table[3]。
+	所有的元素会映射到这4个桶里面的一个上面去。
+*/
 #define DICT_HT_INITIAL_SIZE     4
 
 /* ------------------------------- Macros ------------------------------------*/
+//释放条目中的v.val
 #define dictFreeVal(d, entry) \
     if ((d)->type->valDestructor) \
         (d)->type->valDestructor((d)->privdata, (entry)->v.val)
-
+//设置条目中的v.val
 #define dictSetVal(d, entry, _val_) do { \
     if ((d)->type->valDup) \
         entry->v.val = (d)->type->valDup((d)->privdata, _val_); \
@@ -111,12 +126,15 @@ typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
         entry->v.val = (_val_); \
 } while(0)
 
+//设置条目中的v.int64_t
 #define dictSetSignedIntegerVal(entry, _val_) \
     do { entry->v.s64 = _val_; } while(0)
 
+//设置条目中的v.uint64_t
 #define dictSetUnsignedIntegerVal(entry, _val_) \
     do { entry->v.u64 = _val_; } while(0)
 
+//设置条目中的v.double
 #define dictSetDoubleVal(entry, _val_) \
     do { entry->v.d = _val_; } while(0)
 
@@ -144,6 +162,7 @@ typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
 #define dictGetDoubleVal(he) ((he)->v.d)
 #define dictSlots(d) ((d)->ht[0].size+(d)->ht[1].size)
 #define dictSize(d) ((d)->ht[0].used+(d)->ht[1].used)
+//如果rehashidx!=-1表示正在rehash。如果rehashidx==-1，则表示没有rehash。
 #define dictIsRehashing(d) ((d)->rehashidx != -1)
 
 /* API */

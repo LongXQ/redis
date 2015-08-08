@@ -60,9 +60,9 @@
 #define HAVE_MALLOC_SIZE 1
 #define zmalloc_size(p) malloc_size(p)
 #endif
-
+//只有在定义了自己需要内存分配库才会定义了HAVE_MALLOC_SIZE
 #ifndef ZMALLOC_LIB
-#define ZMALLOC_LIB "libc"
+#define ZMALLOC_LIB "libc" //如果上面几个都没定义的话，那么默认使用libc
 #endif
 
 void *zmalloc(size_t size);
@@ -80,7 +80,7 @@ size_t zmalloc_get_smap_bytes_by_field(char *field);
 void zlibc_free(void *ptr);
 
 #ifndef HAVE_MALLOC_SIZE
-size_t zmalloc_size(void *ptr);
+size_t zmalloc_size(void *ptr); //如果没有定义HAVE_MALLOC_SIZE 则使用Redis自带的zmalloc_size
 #endif
 
 #endif /* __ZMALLOC_H */

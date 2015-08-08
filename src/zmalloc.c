@@ -71,10 +71,11 @@ void zlibc_free(void *ptr) {
 #define update_zmalloc_stat_add(__n) __atomic_add_fetch(&used_memory, (__n), __ATOMIC_RELAXED)
 #define update_zmalloc_stat_sub(__n) __atomic_sub_fetch(&used_memory, (__n), __ATOMIC_RELAXED)
 #elif defined(HAVE_ATOMIC)
-#define update_zmalloc_stat_add(__n) __sync_add_and_fetch(&used_memory, (__n))
+#define update_zmalloc_stat_add(__n) __sync_add_and_fetch(&used_memory, (__n)) //先对used_memory加_n，然后返回更新后的值
 #define update_zmalloc_stat_sub(__n) __sync_sub_and_fetch(&used_memory, (__n))
 #else
-#define update_zmalloc_stat_add(__n) do { \
+//如果上面的都没定义，那么只能用加锁来实现used_memory的原子加减操作了
+#define update_zmalloc_stat_add(__n) do { \         
     pthread_mutex_lock(&used_memory_mutex); \
     used_memory += (__n); \
     pthread_mutex_unlock(&used_memory_mutex); \
@@ -90,7 +91,8 @@ void zlibc_free(void *ptr) {
 
 #define update_zmalloc_stat_alloc(__n) do { \
     size_t _n = (__n); \
-    if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
+    //下面这代码的作用主要是内存对齐的目的
+    if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \ 
     if (zmalloc_thread_safe) { \
         update_zmalloc_stat_add(_n); \
     } else { \
@@ -125,7 +127,7 @@ void *zmalloc(size_t size) {
     void *ptr = malloc(size+PREFIX_SIZE);
 
     if (!ptr) zmalloc_oom_handler(size);
-#ifdef HAVE_MALLOC_SIZE
+#ifdef HAVE_MALLOC_SIZE		//如果定义了HAVE_MALLOC_SIZE那么就使用指定的zmalloc_size。
     update_zmalloc_stat_alloc(zmalloc_size(ptr));
     return ptr;
 #else
@@ -136,6 +138,7 @@ void *zmalloc(size_t size) {
 }
 
 void *zcalloc(size_t size) {
+	//calloc分配n个size大小的内存空间，并把这块空间初始化为0，而malloc不会初始化。
     void *ptr = calloc(1, size+PREFIX_SIZE);
 
     if (!ptr) zmalloc_oom_handler(size);
@@ -178,15 +181,23 @@ void *zrealloc(void *ptr, size_t size) {
 #endif
 }
 
+
+//下面这段话解释了PREFIX_SIZE的作用
+//每次除了分配的size之外，还有两部分内存要分配
+//(1)如果size没有对齐sizeof(long)那么需要额外多出一部分用来内存对齐的作用
+//(2)还需要额外分配PREFIX_SIZE的作用用来做header来存储size.
+
 /* Provide zmalloc_size() for systems where this function is not provided by
  * malloc itself, given that in that case we store a header with this
- * information as the first bytes of every allocation. */
+ * information as the first bytes of every allocation. */        
 #ifndef HAVE_MALLOC_SIZE
 size_t zmalloc_size(void *ptr) {
     void *realptr = (char*)ptr-PREFIX_SIZE;
     size_t size = *((size_t*)realptr);
     /* Assume at least that all the allocations are padded at sizeof(long) by
      * the underlying allocator. */
+     //假设所有的通过默认的内存分配器分配的内存最少都是以sizeof(long)对齐的，所以实际分配的大小往往比要求的大些
+    //所以要在size上面加上多出来的这部分
     if (size&(sizeof(long)-1)) size += sizeof(long)-(size&(sizeof(long)-1));
     return size+PREFIX_SIZE;
 }
@@ -210,6 +221,7 @@ void zfree(void *ptr) {
 #endif
 }
 
+//分配一个内存空间，然后字符串s的内容复制到里面，再返回新分配的地址
 char *zstrdup(const char *s) {
     size_t l = strlen(s)+1;
     char *p = zmalloc(l);
@@ -218,6 +230,7 @@ char *zstrdup(const char *s) {
     return p;
 }
 
+//返回zmalloc总共已经使用了多少内存了，因为每次分配内存都会把分配的大小加到used_memory上，所以返回这个值就可以了.
 size_t zmalloc_used_memory(void) {
     size_t um;
 
@@ -269,7 +282,7 @@ size_t zmalloc_get_rss(void) {
     int fd, count;
     char *p, *x;
 
-    snprintf(filename,256,"/proc/%d/stat",getpid());
+    snprintf(filename,256,"/proc/%d/stat",getpid()); //将"/proc/%d/stat"写到filename中去
     if ((fd = open(filename,O_RDONLY)) == -1) return 0;
     if (read(fd,buf,4096) <= 0) {
         close(fd);
