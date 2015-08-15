@@ -618,11 +618,15 @@ dictIterator *dictGetSafeIterator(dict *d) {
     return i;
 }
 
+/*
+	取迭代器指向的dict里面下一个元素
+*/
 dictEntry *dictNext(dictIterator *iter)
 {
     while (1) {
         if (iter->entry == NULL) {
             dictht *ht = &iter->d->ht[iter->table];
+			//如果index=-1和table=0说明此迭代器是第一次被使用
             if (iter->index == -1 && iter->table == 0) {
                 if (iter->safe)
                     iter->d->iterators++;
@@ -630,6 +634,7 @@ dictEntry *dictNext(dictIterator *iter)
                     iter->fingerprint = dictFingerprint(iter->d);
             }
             iter->index++;
+			//如果index>=size则说明已经遍历到了最后一个bucket里面了
             if (iter->index >= (long) ht->size) {
                 if (dictIsRehashing(iter->d) && iter->table == 0) {
                     iter->table++;
@@ -653,6 +658,7 @@ dictEntry *dictNext(dictIterator *iter)
     return NULL;
 }
 
+//释放迭代器，如果index!=-1和table!=0说明此迭代器已经被使用了
 void dictReleaseIterator(dictIterator *iter)
 {
     if (!(iter->index == -1 && iter->table == 0)) {
@@ -675,6 +681,7 @@ dictEntry *dictGetRandomKey(dict *d)
     if (dictSize(d) == 0) return NULL;
     if (dictIsRehashing(d)) _dictRehashStep(d);
     if (dictIsRehashing(d)) {
+		//如果正在rehasing，那么rehashidx<size
         do {
             /* We are sure there are no elements in indexes from 0
              * to rehashidx-1 */
@@ -685,6 +692,7 @@ dictEntry *dictGetRandomKey(dict *d)
                                       d->ht[0].table[h];
         } while(he == NULL);
     } else {
+   	//如果没有rehash了，那么只有ht[0]里面有数据，ht[1]里面是空的
         do {
             h = random() & d->ht[0].sizemask;
             he = d->ht[0].table[h];
@@ -695,6 +703,7 @@ dictEntry *dictGetRandomKey(dict *d)
      * list and we need to get a random element from the list.
      * The only sane way to do so is counting the elements and
      * select a random index. */
+    //现在我们得到了一个非空的bucket了，但是bucket是一个链表，为了得到随机的元素，还需要进一步随机处理
     listlen = 0;
     orighe = he;
     while(he) {
@@ -796,19 +805,29 @@ unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
     return stored;
 }
 
-/* Function to reverse bits. Algorithm from:
+/* Function to reverse bits(反转位). Algorithm from:
  * http://graphics.stanford.edu/~seander/bithacks.html#ReverseParallel */
+
+ //这个算法实现了位反转操作
 static unsigned long rev(unsigned long v) {
     unsigned long s = 8 * sizeof(v); // bit size; must be power of 2
     unsigned long mask = ~0;
     while ((s >>= 1) > 0) {
+		//下面这行代码的作用是让mask的高一半的位为0，如11111111-->00001111
         mask ^= (mask << s);
+		/*
+			下面这行代码的作用是使v的前一半的位和后一半的位，实现反转
+			
+			假设v=1011 0011那么之后v=0011 1011
+
+			那么经过很多次循环后，就能实现位反转
+		*/
         v = ((v >> s) & mask) | ((v << s) & ~mask);
     }
     return v;
 }
 
-/* dictScan() is used to iterate over the elements of a dictionary.
+/* dictScan() is used to iterate over(遍历) the elements of a dictionary.
  *
  * Iterating works the following way:
  *
@@ -892,6 +911,10 @@ static unsigned long rev(unsigned long v) {
  * 3) The reverse cursor is somewhat hard to understand at first, but this
  *    comment is supposed to help.
  */
+
+/*
+	我们假设初始执行dictScan的时候，v=xx1100
+*/
 unsigned long dictScan(dict *d,
                        unsigned long v,
                        dictScanFunction *fn,
@@ -903,6 +926,7 @@ unsigned long dictScan(dict *d,
 
     if (dictSize(d) == 0) return 0;
 
+	//如果没有rehashing，说明所有的元素都在ht[0]中
     if (!dictIsRehashing(d)) {
         t0 = &(d->ht[0]);
         m0 = t0->sizemask;
@@ -929,6 +953,8 @@ unsigned long dictScan(dict *d,
 
         /* Emit entries at cursor */
         de = t0->table[v & m0];
+
+		//先遍历较小的table上的元素
         while (de) {
             fn(privdata, de);
             de = de->next;
@@ -945,14 +971,18 @@ unsigned long dictScan(dict *d,
             }
 
             /* Increment bits not covered by the smaller mask */
+			//下面这行代码的作用是使v的高位加1操作，假如v=101100,m0=1111,那么执行完这行代码之后v=111100
             v = (((v | m0) + 1) & ~m0) | (v & m0);
 
             /* Continue while bits covered by mask difference is non-zero */
         } while (v & (m0 ^ m1));
     }
 
+	//当执行到下面这行代码的时候，xx1100所有的元素都遍历到了
+	
     /* Set unmasked bits so incrementing the reversed cursor
      * operates on the masked bits of the smaller table */
+    //设置v=111100，也就是高位全是1，低位保持不变，和传统的加一不同，这里的加一是对高位加一操作。如1100对高位加一后变为0010
     v |= ~m0;
 
     /* Increment the reverse cursor */
