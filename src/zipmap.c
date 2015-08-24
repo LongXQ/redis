@@ -93,6 +93,9 @@
 #define ZIPMAP_LEN_BYTES(_l) (((_l) < ZIPMAP_BIGLEN) ? 1 : sizeof(unsigned int)+1)
 
 /* Create a new empty zipmap. */
+/*
+	新建一个空的zipmap:<zmlen><zmend>
+*/
 unsigned char *zipmapNew(void) {
     unsigned char *zm = zmalloc(2);
 
@@ -102,6 +105,9 @@ unsigned char *zipmapNew(void) {
 }
 
 /* Decode the encoded length pointed by 'p' */
+/*
+	对p指向的结点的长度进行解码
+*/
 static unsigned int zipmapDecodeLength(unsigned char *p) {
     unsigned int len = *p;
 
@@ -113,6 +119,9 @@ static unsigned int zipmapDecodeLength(unsigned char *p) {
 
 /* Encode the length 'l' writing it in 'p'. If p is NULL it just returns
  * the amount of bytes required to encode such a length. */
+/*
+	对长度len进行编码，并返回编码所需要的字节长度
+*/
 static unsigned int zipmapEncodeLength(unsigned char *p, unsigned int len) {
     if (p == NULL) {
         return ZIPMAP_LEN_BYTES(len);
@@ -143,8 +152,8 @@ static unsigned char *zipmapLookupRaw(unsigned char *zm, unsigned char *key, uns
         unsigned char free;
 
         /* Match or skip the key */
-        l = zipmapDecodeLength(p);
-        llen = zipmapEncodeLength(NULL,l);
+        l = zipmapDecodeLength(p);	/* l为p的长度 */
+        llen = zipmapEncodeLength(NULL,l);	/* llen为对l进行编码需要的字节数:1或者是5*/
         if (key != NULL && k == NULL && l == klen && !memcmp(p+llen,key,l)) {
             /* Only return when the user doesn't care
              * for the total length of the zipmap. */
