@@ -44,6 +44,17 @@
 #include "sha1.h"
 
 /* Glob-style pattern matching. */
+/*
+	对string进行glob-style模式匹配，也就是通配符匹配:
+	*匹配一个或多个字符串;
+	?匹配任意一个字符;
+	[abc]匹配里面的任意一个字符;
+	值得注意的是，redis里面对'\\'进行了特殊处理:
+	如果'\\'是在末尾，则待匹配的串叶必须要有'\\'，如:
+		"abc\\"和"abc\\"匹配;
+	如果'\\'不是在末尾，它后面还接着其他字符，那么待匹配的串只需要有对应的字符就能进行匹配:
+		"abc\\a"和"abc\\a"不匹配，但是和"abca"匹配。
+*/
 int stringmatchlen(const char *pattern, int patternLen,
         const char *string, int stringLen, int nocase)
 {
@@ -177,6 +188,9 @@ int stringmatch(const char *pattern, const char *string, int nocase) {
  * On parsing error, if *err is not NULL, it's set to 1, otherwise it's
  * set to 0. On error the function return value is 0, regardless of the
  * fact 'err' is NULL or not. */
+ /*
+ 	把p指向的描述内存字节数的字符串转换成long long类型
+ */
 long long memtoll(const char *p, int *err) {
     const char *u;
     char buf[128];
@@ -221,6 +235,7 @@ long long memtoll(const char *p, int *err) {
 
     char *endptr;
     errno = 0;
+	//strtoll位于<stdlib.h>中，10表示10进制
     val = strtoll(buf,&endptr,10);
     if ((val == 0 && errno == EINVAL) || *endptr != '\0') {
         if (err) *err = 1;
@@ -231,6 +246,7 @@ long long memtoll(const char *p, int *err) {
 
 /* Return the number of digits of 'v' when converted to string in radix 10.
  * See ll2string() for more information. */
+ //检查v如果转换成string的长度
 uint32_t digits10(uint64_t v) {
     if (v < 10) return 1;
     if (v < 100) return 2;
@@ -262,6 +278,7 @@ uint32_t digits10(uint64_t v) {
  *
  * Modified in order to handle signed integers since the original code was
  * designed for unsigned integers. */
+ //把long long转换成string类型，返回用来描述long long所需要的字符数
 int ll2string(char* dst, size_t dstlen, long long svalue) {
     static const char digits[201] =
         "0001020304050607080910111213141516171819"
@@ -294,6 +311,7 @@ int ll2string(char* dst, size_t dstlen, long long svalue) {
     uint32_t next = length;
     dst[next] = '\0';
     next--;
+	//为了加快转换速度，每次都是转换两位
     while (value >= 100) {
         int const i = (value % 100) * 2;
         value /= 100;
@@ -319,6 +337,7 @@ int ll2string(char* dst, size_t dstlen, long long svalue) {
 /* Convert a string into a long long. Returns 1 if the string could be parsed
  * into a (non-overflowing) long long, 0 otherwise. The value will be set to
  * the parsed value when appropriate. */
+ //string转换成long long类型，如果能转换则返回1，否则返回0
 int string2ll(const char *s, size_t slen, long long *value) {
     const char *p = s;
     size_t plen = 0;
@@ -355,11 +374,11 @@ int string2ll(const char *s, size_t slen, long long *value) {
     }
 
     while (plen < slen && p[0] >= '0' && p[0] <= '9') {
-        if (v > (ULLONG_MAX / 10)) /* Overflow. */
+        if (v > (ULLONG_MAX / 10)) /* Overflow(防止v*=10溢出). */
             return 0;
         v *= 10;
 
-        if (v > (ULLONG_MAX - (p[0]-'0'))) /* Overflow. */
+        if (v > (ULLONG_MAX - (p[0]-'0'))) /* Overflow(防止v+=p[0]-'0'溢出). */
             return 0;
         v += p[0]-'0';
 
@@ -385,25 +404,29 @@ int string2ll(const char *s, size_t slen, long long *value) {
 /* Convert a string into a long. Returns 1 if the string could be parsed into a
  * (non-overflowing) long, 0 otherwise. The value will be set to the parsed
  * value when appropriate. */
+ //string类型转换成long类型
 int string2l(const char *s, size_t slen, long *lval) {
     long long llval;
 
     if (!string2ll(s,slen,&llval))
         return 0;
 
-    if (llval < LONG_MIN || llval > LONG_MAX)
+    if (llval < LONG_MIN || llval > LONG_MAX)	/* 说明溢出了 */
         return 0;
 
-    *lval = (long)llval;
+    *lval = (long)llval;	/* long long类型转换成long类型 */
     return 1;
 }
 
 /* Convert a double to a string representation. Returns the number of bytes
  * required. The representation should always be parsable by strtod(3). */
+ //double转换成string类型，返回转换成string类型所需要的字节数
 int d2string(char *buf, size_t len, double value) {
     if (isnan(value)) {
+		/* 如果value一个数字 */
         len = snprintf(buf,len,"nan");
     } else if (isinf(value)) {
+    	/* 如果value是一个无穷大的值(正无穷或者负无穷) */
         if (value < 0)
             len = snprintf(buf,len,"-inf");
         else
@@ -425,6 +448,7 @@ int d2string(char *buf, size_t len, double value) {
          * where casting to long long is safe. Then using two castings we
          * make sure the decimal part is zero. If all this is true we use
          * integer printing function that is much faster. */
+        /* 检测float是否是不是处在能够转换成long long类型的安全范围内。*/
         double min = -4503599627370495; /* (2^52)-1 */
         double max = 4503599627370496; /* -(2^52) */
         if (value > min && value < max && value == ((double)((long long)value)))
@@ -441,6 +465,9 @@ int d2string(char *buf, size_t len, double value) {
  * given execution of Redis, so that if you are talking with an instance
  * having run_id == A, and you reconnect and it has run_id == B, you can be
  * sure that it is either a different instance or it was restarted. */
+//这个函数用来生成一个redis "Run ID"，这个ID是一个SHA1-sized随机数字，用来标识redis的一次执行实例
+//如果你正在和一个ID=A的redis实例在进行通信，如果你重新连接了redis，发现ID=B了，那么说明redis是另外一个实例了
+//或者是以前那个ID=A的redis实例重启了之后它的ID变为B了
 void getRandomHexChars(char *p, unsigned int len) {
     char *charset = "0123456789abcdef";
     unsigned int j;
@@ -455,6 +482,7 @@ void getRandomHexChars(char *p, unsigned int len) {
          * the same seed with a progressive counter. For the goals of this
          * function we just need non-colliding strings, there are no
          * cryptographic security needs. */
+         //dev/urandom产生随机的字节流
         FILE *fp = fopen("/dev/urandom","r");
         if (fp && fread(seed,sizeof(seed),1,fp) == 1)
             seed_initialized = 1;
@@ -521,6 +549,9 @@ void getRandomHexChars(char *p, unsigned int len) {
  * The function does not try to normalize everything, but only the obvious
  * case of one or more "../" appearning at the start of "filename"
  * relative path. */
+/*
+	返回filename的SDS字符串形式的绝对路径，如果失败返回NULL
+*/
 sds getAbsolutePath(char *filename) {
     char cwd[1024];
     sds abspath;
@@ -530,6 +561,7 @@ sds getAbsolutePath(char *filename) {
     if (relpath[0] == '/') return relpath; /* Path is already absolute. */
 
     /* If path is relative, join cwd and relative path. */
+	/* getcwd返回当前的工作目录 */
     if (getcwd(cwd,sizeof(cwd)) == NULL) {
         sdsfree(relpath);
         return NULL;
@@ -544,6 +576,7 @@ sds getAbsolutePath(char *filename) {
      *
      * For every "../" we find in the filename, we remove it and also remove
      * the last element of the cwd, unless the current cwd is "/". */
+    //移除../
     while (sdslen(relpath) >= 3 &&
            relpath[0] == '.' && relpath[1] == '.' && relpath[2] == '/')
     {
@@ -570,6 +603,7 @@ sds getAbsolutePath(char *filename) {
  * relative or absolute path. This function just checks that no / or \
  * character exists inside the specified path, that's enough in the
  * environments where Redis runs. */
+//检测文件名是不是基本的名字，也就是不带任何绝对和相对的路径
 int pathIsBaseName(char *path) {
     return strchr(path,'/') == NULL && strchr(path,'\\') == NULL;
 }
