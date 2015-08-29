@@ -46,6 +46,7 @@
 
 /* Include the best multiplexing layer supported by this system.
  * The following should be ordered by performances, descending. */
+/* ae_evport.c ae_epoll.c ae_kqueue.c ae_select.c根据不同的平台选择其中一个 */
 #ifdef HAVE_EVPORT
 #include "ae_evport.c"
 #else
