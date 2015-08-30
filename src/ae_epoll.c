@@ -35,7 +35,7 @@ typedef struct aeApiState {
     int epfd;
     struct epoll_event *events;
 } aeApiState;
-
+/* 创建一个aeApiState实例，其中包括了创建了一个epoll实例 */
 static int aeApiCreate(aeEventLoop *eventLoop) {
     aeApiState *state = zmalloc(sizeof(aeApiState));
 
@@ -45,6 +45,7 @@ static int aeApiCreate(aeEventLoop *eventLoop) {
         zfree(state);
         return -1;
     }
+	//实例化一个epoll实例
     state->epfd = epoll_create(1024); /* 1024 is just a hint for the kernel */
     if (state->epfd == -1) {
         zfree(state->events);
@@ -54,22 +55,23 @@ static int aeApiCreate(aeEventLoop *eventLoop) {
     eventLoop->apidata = state;
     return 0;
 }
-
+//调整了aeApiState::events的大小
 static int aeApiResize(aeEventLoop *eventLoop, int setsize) {
     aeApiState *state = eventLoop->apidata;
 
     state->events = zrealloc(state->events, sizeof(struct epoll_event)*setsize);
     return 0;
 }
-
+//关系epoll实例，释放epoll所占用的内存
 static void aeApiFree(aeEventLoop *eventLoop) {
     aeApiState *state = eventLoop->apidata;
-
+	
+	//关闭了epoll实例
     close(state->epfd);
     zfree(state->events);
     zfree(state);
 }
-
+//添加一个事件到epoll实例中去
 static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
     aeApiState *state = eventLoop->apidata;
     struct epoll_event ee;
@@ -87,7 +89,7 @@ static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
     if (epoll_ctl(state->epfd,op,fd,&ee) == -1) return -1;
     return 0;
 }
-
+//从epoll实例中删除fd的delmask事件，如果epoll中没有任何关于fd的事件，则从epoll中删除fd
 static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask) {
     aeApiState *state = eventLoop->apidata;
     struct epoll_event ee;
@@ -106,7 +108,7 @@ static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask) {
         epoll_ctl(state->epfd,EPOLL_CTL_DEL,fd,&ee);
     }
 }
-
+//等待epoll实例中相关fd的事件发生
 static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
     aeApiState *state = eventLoop->apidata;
     int retval, numevents = 0;

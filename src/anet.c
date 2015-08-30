@@ -447,13 +447,14 @@ int anetWrite(int fd, char *buf, int count)
     return totlen;
 }
 
+/* 先对socket s进行地址绑定sa，然后对它进行监听 */
 static int anetListen(char *err, int s, struct sockaddr *sa, socklen_t len, int backlog) {
     if (bind(s,sa,len) == -1) {
         anetSetError(err, "bind: %s", strerror(errno));
         close(s);
         return ANET_ERR;
     }
-
+	//backlog参数用来定义待连接队列的长度
     if (listen(s, backlog) == -1) {
         anetSetError(err, "listen: %s", strerror(errno));
         close(s);
@@ -461,7 +462,7 @@ static int anetListen(char *err, int s, struct sockaddr *sa, socklen_t len, int 
     }
     return ANET_OK;
 }
-
+//仅仅支持IPV6
 static int anetV6Only(char *err, int s) {
     int yes = 1;
     if (setsockopt(s,IPPROTO_IPV6,IPV6_V6ONLY,&yes,sizeof(yes)) == -1) {
@@ -475,6 +476,7 @@ static int anetV6Only(char *err, int s) {
 static int _anetTcpServer(char *err, int port, char *bindaddr, int af, int backlog)
 {
     int s, rv;
+	//端口号
     char _port[6];  /* strlen("65535") */
     struct addrinfo hints, *servinfo, *p;
 
@@ -508,12 +510,12 @@ end:
     freeaddrinfo(servinfo);
     return s;
 }
-
+/* 设置TCP IPV4的服务端 */
 int anetTcpServer(char *err, int port, char *bindaddr, int backlog)
 {
     return _anetTcpServer(err, port, bindaddr, AF_INET, backlog);
 }
-
+/* 设置TCP IPV6的服务端 */
 int anetTcp6Server(char *err, int port, char *bindaddr, int backlog)
 {
     return _anetTcpServer(err, port, bindaddr, AF_INET6, backlog);
@@ -536,7 +538,7 @@ int anetUnixServer(char *err, char *path, mode_t perm, int backlog)
         chmod(sa.sun_path, perm);
     return s;
 }
-
+/* 通用的接受连接 */
 static int anetGenericAccept(char *err, int s, struct sockaddr *sa, socklen_t *len) {
     int fd;
     while(1) {
@@ -553,7 +555,7 @@ static int anetGenericAccept(char *err, int s, struct sockaddr *sa, socklen_t *l
     }
     return fd;
 }
-
+/* 接受socket s的连接，并把接受的连接端的IP地址和端口号分别存到参数ip和port中 */
 int anetTcpAccept(char *err, int s, char *ip, size_t ip_len, int *port) {
     int fd;
     struct sockaddr_storage sa;
@@ -582,7 +584,7 @@ int anetUnixAccept(char *err, int s) {
 
     return fd;
 }
-
+/* 取得对端socket fd的ip，端口信息 */
 int anetPeerToString(int fd, char *ip, size_t ip_len, int *port) {
     struct sockaddr_storage sa;
     socklen_t salen = sizeof(sa);
@@ -618,7 +620,7 @@ error:
     if (port) *port = 0;
     return -1;
 }
-
+/* 取得本地端协议地址和端口信息 */
 int anetSockName(int fd, char *ip, size_t ip_len, int *port) {
     struct sockaddr_storage sa;
     socklen_t salen = sizeof(sa);
