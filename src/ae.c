@@ -76,6 +76,7 @@ aeEventLoop *aeCreateEventLoop(int setsize) {
     eventLoop->stop = 0;
     eventLoop->maxfd = -1;
     eventLoop->beforesleep = NULL;
+	//创建了epoll实例，并关联到这个创建的aeEventLoop上
     if (aeApiCreate(eventLoop) == -1) goto err;
     /* Events with mask == AE_NONE are not set. So let's initialize the
      * vector with it. */
@@ -93,6 +94,7 @@ err:
 }
 
 /* Return the current set size. */
+//返回现在eventloop中集合的大小
 int aeGetSetSize(aeEventLoop *eventLoop) {
     return eventLoop->setsize;
 }
@@ -100,10 +102,11 @@ int aeGetSetSize(aeEventLoop *eventLoop) {
 /* Resize the maximum set size of the event loop.
  * If the requested set size is smaller than the current set size, but
  * there is already a file descriptor in use that is >= the requested
- * set size minus one, AE_ERR is returned and the operation is not
+ * set size minus one(也就是eventLoop->maxfd >= setsize), AE_ERR is returned and the operation is not
  * performed at all.
  *
  * Otherwise AE_OK is returned and the operation is successful. */
+/* 调整eventLoop中集合的大小。于此同时还要调整和eventLoop关联的epoll实例中集合的大小 */
 int aeResizeSetSize(aeEventLoop *eventLoop, int setsize) {
     int i;
 
@@ -132,22 +135,24 @@ void aeDeleteEventLoop(aeEventLoop *eventLoop) {
 void aeStop(aeEventLoop *eventLoop) {
     eventLoop->stop = 1;
 }
-
+//创建fd的mask事件到eventLoop中去
 int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
         aeFileProc *proc, void *clientData)
 {
+	//fd超出现在的eventLoop中集合的大小，说明没有足够的空间来容纳它
     if (fd >= eventLoop->setsize) {
         errno = ERANGE;
         return AE_ERR;
     }
     aeFileEvent *fe = &eventLoop->events[fd];
-
+	//添加到epoll实例中去
     if (aeApiAddEvent(eventLoop, fd, mask) == -1)
         return AE_ERR;
     fe->mask |= mask;
     if (mask & AE_READABLE) fe->rfileProc = proc;
     if (mask & AE_WRITABLE) fe->wfileProc = proc;
     fe->clientData = clientData;
+	//更新maxfd的值
     if (fd > eventLoop->maxfd)
         eventLoop->maxfd = fd;
     return AE_OK;
@@ -158,7 +163,7 @@ void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask)
     if (fd >= eventLoop->setsize) return;
     aeFileEvent *fe = &eventLoop->events[fd];
     if (fe->mask == AE_NONE) return;
-
+	//从epoll实例中删除fd的mask事件
     aeApiDelEvent(eventLoop, fd, mask);
     fe->mask = fe->mask & (~mask);
     if (fd == eventLoop->maxfd && fe->mask == AE_NONE) {
@@ -170,14 +175,14 @@ void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask)
         eventLoop->maxfd = j;
     }
 }
-
+//得到fd注册在eventLoop中的事件
 int aeGetFileEvents(aeEventLoop *eventLoop, int fd) {
     if (fd >= eventLoop->setsize) return 0;
     aeFileEvent *fe = &eventLoop->events[fd];
 
     return fe->mask;
 }
-
+//得到目前的时间
 static void aeGetTime(long *seconds, long *milliseconds)
 {
     struct timeval tv;
@@ -186,7 +191,7 @@ static void aeGetTime(long *seconds, long *milliseconds)
     *seconds = tv.tv_sec;
     *milliseconds = tv.tv_usec/1000;
 }
-
+//增减milliseconds的时间到目前的时间上
 static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) {
     long cur_sec, cur_ms, when_sec, when_ms;
 
@@ -200,7 +205,7 @@ static void aeAddMillisecondsToNow(long long milliseconds, long *sec, long *ms) 
     *sec = when_sec;
     *ms = when_ms;
 }
-
+//新建一个时间事件到eventLoop中去
 long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
         aeTimeProc *proc, void *clientData,
         aeEventFinalizerProc *finalizerProc)
@@ -219,7 +224,7 @@ long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
     eventLoop->timeEventHead = te;
     return id;
 }
-
+//在eventLoop的时间事件中删除ID=id的时间事件
 int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id)
 {
     aeTimeEvent *te, *prev = NULL;
@@ -253,6 +258,7 @@ int aeDeleteTimeEvent(aeEventLoop *eventLoop, long long id)
  *    Much better but still insertion or deletion of timers is O(N).
  * 2) Use a skiplist to have this operation as O(1) and insertion as O(log(N)).
  */
+ //查找最近快发生的时间事件
 static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
 {
     aeTimeEvent *te = eventLoop->timeEventHead;
@@ -269,10 +275,12 @@ static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
 }
 
 /* Process time events */
+//处理时间事件，返回被处理的时间事件个数
 static int processTimeEvents(aeEventLoop *eventLoop) {
     int processed = 0;
     aeTimeEvent *te;
     long long maxId;
+	//取得当前时间
     time_t now = time(NULL);
 
     /* If the system clock is moved to the future, and then set back to the
@@ -280,9 +288,12 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
      * means that scheduled operations will not be performed soon enough.
      *
      * Here we try to detect system clock skews, and force all the time
-     * events to be processed ASAP when this happens: the idea is that
+     * events to be processed ASAP(立即，尽快:as soon as posible) when this happens: the idea is that
      * processing events earlier is less dangerous than delaying them
      * indefinitely, and practice suggests it is. */
+    /* eventLoop->lastTime最开始是在创建eventLoop的时候初始化的
+     * 如果当前时间比lastTime还小，说明lastTime被设置成了一个未来的时间，那么时间事件可能会被随机的被推迟(我们不知道lastTime被设置成了未来哪个时间)
+       为了防止这种情况发生，我们强制所有的时间事件被立即尽快处理 */
     if (now < eventLoop->lastTime) {
         te = eventLoop->timeEventHead;
         while(te) {
@@ -346,7 +357,8 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
  * if flags has AE_ALL_EVENTS set, all the kind of events are processed.
  * if flags has AE_FILE_EVENTS set, file events are processed.
  * if flags has AE_TIME_EVENTS set, time events are processed.
- * if flags has AE_DONT_WAIT set the function returns ASAP until all
+ * if flags has AE_DONT_WAIT set the function returns ASAP(立即，尽快:as soon as posible) until all
+ * 如果flags被设置成AE_DONT_WAIT,那么函数尽快返回，直到所有的事件无需等待地被处理了
  * the events that's possible to process without to wait are processed.
  *
  * The function returns the number of events processed. */
