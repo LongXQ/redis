@@ -380,12 +380,14 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
         struct timeval tv, *tvp;
 
         if (flags & AE_TIME_EVENTS && !(flags & AE_DONT_WAIT))
+			//shortest表示最快要发生的时间事件
             shortest = aeSearchNearestTimer(eventLoop);
         if (shortest) {
             long now_sec, now_ms;
 
             /* Calculate the time missing for the nearest
              * timer to fire. */
+             //tvp表示离第一个时间事件发生的时间间隔
             aeGetTime(&now_sec, &now_ms);
             tvp = &tv;
             tvp->tv_sec = shortest->when_sec - now_sec;
@@ -401,6 +403,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
             /* If we have to check for events but need to return
              * ASAP because of AE_DONT_WAIT we need to set the timeout
              * to zero */
+             //tvp为0表示epoll如果没有就绪的事件立即返回，所以就不会一直waiting
             if (flags & AE_DONT_WAIT) {
                 tv.tv_sec = tv.tv_usec = 0;
                 tvp = &tv;
@@ -409,8 +412,10 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
                 tvp = NULL; /* wait forever */
             }
         }
-
+		
+		//numevents为就绪的事件个数
         numevents = aeApiPoll(eventLoop, tvp);
+		//处理就绪的事件
         for (j = 0; j < numevents; j++) {
             aeFileEvent *fe = &eventLoop->events[eventLoop->fired[j].fd];
             int mask = eventLoop->fired[j].mask;
@@ -420,6 +425,8 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 	    /* note the fe->mask & mask & ... code: maybe an already processed
              * event removed an element that fired and we still didn't
              * processed, so we check if the event is still valid. */
+            /* fe->mask & mask & AE_READABLE来检查事件的合法性 :因为之前的已经处理的事件可能会移除掉已经
+				fired的但是还没有处理的事件，所以在处理这个事件之前必须在检查一下合法性 */
             if (fe->mask & mask & AE_READABLE) {
                 rfired = 1;
                 fe->rfileProc(eventLoop,fd,fe->clientData,mask);
