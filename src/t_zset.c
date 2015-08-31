@@ -108,7 +108,8 @@ int zslRandomLevel(void) {
     return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
 }
 /* 往zskiplist中插入一个node;
- * update数组为记录需要更新forward指针的节点 */
+ * update数组为记录需要更新forward指针的节点
+ * rank数组记录了到每一层(level)的要经历的节点数目*/
 zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     unsigned int rank[ZSKIPLIST_MAXLEVEL];
@@ -141,7 +142,8 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
             update[i] = zsl->header;
 			/*
 				假设有两个节点，分别叫叫node1，node2，并且：
-				node->level[i].forward=
+				node1->level[i].forward=node2，那么node1->level[i].span的值
+				为node1到node2之间的节点总数
 			*/
             update[i]->level[i].span = zsl->length;
         }
@@ -155,11 +157,13 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
         update[i]->level[i].forward = x;
 
         /* update span covered by update[i] as x is inserted here */
+		/* 因为插入了新节点，所以要更新节点的level[i].span */
         x->level[i].span = update[i]->level[i].span - (rank[0] - rank[i]);
         update[i]->level[i].span = (rank[0] - rank[i]) + 1;
     }
 
     /* increment span for untouched levels */
+	//因为插入了一个新节点，所以level以上的层的span相当于扩宽了一个节点的跨度，
     for (i = level; i < zsl->level; i++) {
         update[i]->level[i].span++;
     }
