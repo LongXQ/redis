@@ -404,7 +404,7 @@ typedef long long mstime_t; /* millisecond time type. */
  *----------------------------------------------------------------------------*/
 
 /* A redis object, that is a type able to hold a string / list / set */
-
+/* 一个redis对象是能够存储一个string/list/set的类型 */
 /* The actual Redis Object */
 #define REDIS_LRU_BITS 24
 #define REDIS_LRU_CLOCK_MAX ((1<<REDIS_LRU_BITS)-1) /* Max value of obj->lru */
@@ -580,12 +580,14 @@ struct sharedObjectsStruct {
 };
 
 /* ZSETs use a specialized version of Skiplists */
+/* ZSETS使用了一个特别的skiplists版本 */
 typedef struct zskiplistNode {
     robj *obj;
     double score;
     struct zskiplistNode *backward;
     struct zskiplistLevel {
         struct zskiplistNode *forward;
+		//span的意思是:跨度,跨距，范围
         unsigned int span;
     } level[];
 } zskiplistNode;
@@ -595,7 +597,7 @@ typedef struct zskiplist {
     unsigned long length;
     int level;
 } zskiplist;
-
+/* ZSET是一种有序的set */
 typedef struct zset {
     dict *dict;
     zskiplist *zsl;

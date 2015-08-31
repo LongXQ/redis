@@ -249,7 +249,7 @@ size_t zmalloc_used_memory(void) {
 
     return um;
 }
-
+//开启安全操作内存变量的模式，比如操作内存使用量等一些关于内存管理的变量要使用安全的模式(原子操作)，防止多线程出现冲突
 void zmalloc_enable_thread_safeness(void) {
     zmalloc_thread_safe = 1;
 }

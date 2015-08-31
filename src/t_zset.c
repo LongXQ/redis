@@ -54,14 +54,14 @@
 
 static int zslLexValueGteMin(robj *value, zlexrangespec *spec);
 static int zslLexValueLteMax(robj *value, zlexrangespec *spec);
-
+/* 创建一个zskiplistNode,分配的内存大小根据level来分配 */
 zskiplistNode *zslCreateNode(int level, double score, robj *obj) {
     zskiplistNode *zn = zmalloc(sizeof(*zn)+level*sizeof(struct zskiplistLevel));
     zn->score = score;
     zn->obj = obj;
     return zn;
 }
-
+/* 新建一个zskiplist */
 zskiplist *zslCreate(void) {
     int j;
     zskiplist *zsl;
@@ -78,16 +78,17 @@ zskiplist *zslCreate(void) {
     zsl->tail = NULL;
     return zsl;
 }
-
+/* 释放node所占用的内存空间，并对node所引用的对象计数减一 */
 void zslFreeNode(zskiplistNode *node) {
     decrRefCount(node->obj);
     zfree(node);
 }
-
+/* 释放zskiplist所占用的内存空间(包括所有的node节点所占用的内存空间) */
 void zslFree(zskiplist *zsl) {
     zskiplistNode *node = zsl->header->level[0].forward, *next;
 
     zfree(zsl->header);
+	//一次遍历所有的node节点，然后释放它们所占用的内存
     while(node) {
         next = node->level[0].forward;
         zslFreeNode(node);
@@ -106,7 +107,8 @@ int zslRandomLevel(void) {
         level += 1;
     return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
 }
-
+/* 往zskiplist中插入一个node;
+ * update数组为记录需要更新forward指针的节点 */
 zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     unsigned int rank[ZSKIPLIST_MAXLEVEL];
@@ -114,6 +116,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
 
     redisAssert(!isnan(score));
     x = zsl->header;
+	//更新update数组，rank数组
     for (i = zsl->level-1; i >= 0; i--) {
         /* store rank that is crossed to reach the insert position */
         rank[i] = i == (zsl->level-1) ? 0 : rank[i+1];
@@ -130,16 +133,23 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
      * scores, and the re-insertion of score and redis object should never
      * happen since the caller of zslInsert() should test in the hash table
      * if the element is already inside or not. */
+    /* 如果随机取得的level比原先的还要大，则要更新update数组 */
     level = zslRandomLevel();
     if (level > zsl->level) {
         for (i = zsl->level; i < level; i++) {
             rank[i] = 0;
             update[i] = zsl->header;
+			/*
+				假设有两个节点，分别叫叫node1，node2，并且：
+				node->level[i].forward=
+			*/
             update[i]->level[i].span = zsl->length;
         }
         zsl->level = level;
     }
+	//创建一个node节点，但还未插入到zskiplist中去
     x = zslCreateNode(level,score,obj);
+	//插入新建的node到zskiplist中去，并更新记录在update数组中node的forward指针
     for (i = 0; i < level; i++) {
         x->level[i].forward = update[i]->level[i].forward;
         update[i]->level[i].forward = x;
@@ -154,6 +164,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
         update[i]->level[i].span++;
     }
 
+	//更新backward
     x->backward = (update[0] == zsl->header) ? NULL : update[0];
     if (x->level[0].forward)
         x->level[0].forward->backward = x;
