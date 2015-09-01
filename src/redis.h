@@ -186,6 +186,7 @@ typedef long long mstime_t; /* millisecond time type. */
 /* Objects encoding. Some kind of objects like Strings and Hashes can be
  * internally represented in multiple ways. The 'encoding' field of the object
  * is set to one of this fields for this object. */
+/* redis的数据类型如strings，hashes，lists，sets，sorted sets等在内部的编码方式 */
 #define REDIS_ENCODING_RAW 0     /* Raw representation */
 #define REDIS_ENCODING_INT 1     /* Encoded as integer */
 #define REDIS_ENCODING_HT 2      /* Encoded as hash table */
@@ -509,7 +510,7 @@ typedef struct readyList {
     robj *key;
 } readyList;
 
-/* With multiplexing we need to take per-client state.
+/* With multiplexing(多路技术，复用) we need to take per-client state.
  * Clients are taken in a linked list. */
 typedef struct redisClient {
     uint64_t id;            /* Client incremental unique ID. */
@@ -587,7 +588,7 @@ typedef struct zskiplistNode {
     struct zskiplistNode *backward;
     struct zskiplistLevel {
         struct zskiplistNode *forward;
-		//span的意思是:跨度,跨距，范围
+		//span的意思是:跨度,跨距，范围，就是当前结点到forward指向的节点之间要经过的节点数目
         unsigned int span;
     } level[];
 } zskiplistNode;
@@ -1196,18 +1197,18 @@ unsigned long aofRewriteBufferSize(void);
 
 /* Sorted sets data type */
 
-/* Struct to hold a inclusive/exclusive range spec by score comparison. */
+/* Struct to hold a inclusive(包括的，包含的)/exclusive(独有的，专一的) range spec by score comparison. */
 typedef struct {
     double min, max;
     int minex, maxex; /* are min or max exclusive? */
 } zrangespec;
 
-/* Struct to hold an inclusive/exclusive range spec by lexicographic comparison. */
+/* Struct to hold an inclusive/exclusive range spec by lexicographic(字典序) comparison. */
 typedef struct {
     robj *min, *max;  /* May be set to shared.(minstring|maxstring) */
     int minex, maxex; /* are min or max exclusive? */
 } zlexrangespec;
-
+/* zsl中的sl表示skiplist */
 zskiplist *zslCreate(void);
 void zslFree(zskiplist *zsl);
 zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj);
@@ -1376,6 +1377,7 @@ char *redisGitDirty(void);
 uint64_t redisBuildId(void);
 
 /* Commands prototypes */
+/* redis所有命令的函数原型 */
 void authCommand(redisClient *c);
 void pingCommand(redisClient *c);
 void echoCommand(redisClient *c);

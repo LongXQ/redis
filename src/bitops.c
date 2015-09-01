@@ -33,6 +33,12 @@
 /* -----------------------------------------------------------------------------
  * Helpers and low level bit functions.
  * -------------------------------------------------------------------------- */
+ 
+/*
+	这个文件实现了redis bitmaps类型，
+	事实上，bitmap不是一个真实的数据类型，
+	就是一组基于string类型的位操作
+*/
 
 /* This helper function used by GETBIT / SETBIT parses the bit offset argument
  * making sure an error is returned if it is negative or if it overflows

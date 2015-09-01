@@ -181,6 +181,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, robj *obj) {
 /* Internal function used by zslDelete, zslDeleteByScore and zslDeleteByRank */
 void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
     int i;
+	//更新level[i]->forward和level[i]->span
     for (i = 0; i < zsl->level; i++) {
         if (update[i]->level[i].forward == x) {
             update[i]->level[i].span += x->level[i].span - 1;
@@ -189,22 +190,26 @@ void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
             update[i]->level[i].span -= 1;
         }
     }
+	//更新backward
     if (x->level[0].forward) {
         x->level[0].forward->backward = x->backward;
     } else {
         zsl->tail = x->backward;
     }
+	//更新zsl->level
     while(zsl->level > 1 && zsl->header->level[zsl->level-1].forward == NULL)
         zsl->level--;
     zsl->length--;
 }
 
 /* Delete an element with matching score/object from the skiplist. */
+/* 在list中删除和score/object匹配的节点 */
 int zslDelete(zskiplist *zsl, double score, robj *obj) {
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     int i;
 
     x = zsl->header;
+	//找到需要更新level[i]->forward的节点，
     for (i = zsl->level-1; i >= 0; i--) {
         while (x->level[i].forward &&
             (x->level[i].forward->score < score ||
@@ -223,16 +228,17 @@ int zslDelete(zskiplist *zsl, double score, robj *obj) {
     }
     return 0; /* not found */
 }
-
+//我的理解：minex为一，表示具有唯一的min值
 static int zslValueGteMin(double value, zrangespec *spec) {
     return spec->minex ? (value > spec->min) : (value >= spec->min);
 }
-
+//我的理解：maxex为一，表示具有唯一的max值
 static int zslValueLteMax(double value, zrangespec *spec) {
     return spec->maxex ? (value < spec->max) : (value <= spec->max);
 }
 
 /* Returns if there is a part of the zset is in range. */
+/* 检查skiplist中存不存在位于range范围内的节点 ，如果有则返回1，否则返回0 */
 int zslIsInRange(zskiplist *zsl, zrangespec *range) {
     zskiplistNode *x;
 
@@ -251,13 +257,15 @@ int zslIsInRange(zskiplist *zsl, zrangespec *range) {
 
 /* Find the first node that is contained in the specified range.
  * Returns NULL when no element is contained in the range. */
+/* 找到第一个skiplist中的位于range范围内的节点 */
 zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec *range) {
     zskiplistNode *x;
     int i;
 
     /* If everything is out of range, return early. */
+	/* 先检查存不在这样的节点 ，如果不存在这样的节点直接返回NULL */
     if (!zslIsInRange(zsl,range)) return NULL;
-
+	//从首节点开始检查
     x = zsl->header;
     for (i = zsl->level-1; i >= 0; i--) {
         /* Go forward while *OUT* of range. */
@@ -398,6 +406,7 @@ unsigned long zslDeleteRangeByRank(zskiplist *zsl, unsigned int start, unsigned 
  * Returns 0 when the element cannot be found, rank otherwise.
  * Note that the rank is 1-based due to the span of zsl->header to the
  * first element. */
+/* 根据给出的score和o，计算出rank(也就是head到对应节点的span)*/
 unsigned long zslGetRank(zskiplist *zsl, double score, robj *o) {
     zskiplistNode *x;
     unsigned long rank = 0;
@@ -646,7 +655,11 @@ zskiplistNode *zslLastInLexRange(zskiplist *zsl, zlexrangespec *range) {
 /*-----------------------------------------------------------------------------
  * Ziplist-backed sorted set API
  *----------------------------------------------------------------------------*/
-
+/*
+	zzl中zl标识ziplist的意思
+	下面的一组函数的目的就是当sorted set的编码方式为REDIS_ENCODING_SKIPLIST的时候，
+	则sorted set要以siplist的方式进行存储，对skiplist进行操作要用到的函数
+*/
 double zzlGetScore(unsigned char *sptr) {
     unsigned char *vstr;
     unsigned int vlen;
@@ -671,6 +684,7 @@ double zzlGetScore(unsigned char *sptr) {
 /* Return a ziplist element as a Redis string object.
  * This simple abstraction can be used to simplifies some code at the
  * cost of some performance. */
+/* 以redis string对象的形式返回一个ziplist元素 */
 robj *ziplistGetObject(unsigned char *sptr) {
     unsigned char *vstr;
     unsigned int vlen;
@@ -687,6 +701,7 @@ robj *ziplistGetObject(unsigned char *sptr) {
 }
 
 /* Compare element in sorted set with given element. */
+//ziplist中sorted set的元素和给定的元素进行比较
 int zzlCompareElements(unsigned char *eptr, unsigned char *cstr, unsigned int clen) {
     unsigned char *vstr;
     unsigned int vlen;
@@ -706,7 +721,7 @@ int zzlCompareElements(unsigned char *eptr, unsigned char *cstr, unsigned int cl
     if (cmp == 0) return vlen-clen;
     return cmp;
 }
-
+//因为zset以ziplist存放的时候，score和value分别要占用一个entry，所以ziplist的长度自然要翻倍了
 unsigned int zzlLength(unsigned char *zl) {
     return ziplistLen(zl)/2;
 }
@@ -1104,7 +1119,7 @@ unsigned int zsetLength(robj *zobj) {
     }
     return length;
 }
-
+//转换zset的编码方式
 void zsetConvert(robj *zobj, int encoding) {
     zset *zs;
     zskiplistNode *node, *next;
@@ -1128,6 +1143,7 @@ void zsetConvert(robj *zobj, int encoding) {
 
         eptr = ziplistIndex(zl,0);
         redisAssertWithInfo(NULL,zobj,eptr != NULL);
+		//sptr表示score ptr，表明这个ziplist entry中存放的是score
         sptr = ziplistNext(zl,eptr);
         redisAssertWithInfo(NULL,zobj,sptr != NULL);
 
@@ -1140,7 +1156,9 @@ void zsetConvert(robj *zobj, int encoding) {
                 ele = createStringObject((char*)vstr,vlen);
 
             /* Has incremented refcount since it was just created. */
+			//插入到skiplist中去
             node = zslInsert(zs->zsl,score,ele);
+			//同时还要添加到dict中去
             redisAssertWithInfo(NULL,zobj,dictAdd(zs->dict,ele,&node->score) == DICT_OK);
             incrRefCount(ele); /* Added to dictionary. */
             zzlNext(zl,&eptr,&sptr);
