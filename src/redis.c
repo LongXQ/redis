@@ -1396,7 +1396,7 @@ void createSharedObjects(void) {
 
 void initServerConfig(void) {
     int j;
-
+	//设置server的runid，每次运行的时候runid都是不同的
     getRandomHexChars(server.runid,REDIS_RUN_ID_SIZE);
     server.configfile = NULL;
     server.hz = REDIS_DEFAULT_HZ;
@@ -1747,6 +1747,7 @@ void initServer(void) {
 
     signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
+	//设置server的信号处理
     setupSignalHandlers();
 
     if (server.syslog_enabled) {
@@ -1769,10 +1770,12 @@ void initServer(void) {
 
     createSharedObjects();
     adjustOpenFilesLimit();
+	//创建eventloop实例，并初始化它
     server.el = aeCreateEventLoop(server.maxclients+REDIS_EVENTLOOP_FDSET_INCR);
     server.db = zmalloc(sizeof(redisDb)*server.dbnum);
 
     /* Open the TCP listening socket for the user commands. */
+	//打开server的监听socket，用来监听用户的命令
     if (server.port != 0 &&
         listenToPort(server.port,server.ipfd,&server.ipfd_count) == REDIS_ERR)
         exit(1);
@@ -1834,6 +1837,7 @@ void initServer(void) {
 
     /* Create the serverCron() time event, that's our main way to process
      * background operations. */
+    //添加时间事件到eventloop实例中去
     if(aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
         redisPanic("Can't create the serverCron time event.");
         exit(1);
@@ -1841,6 +1845,7 @@ void initServer(void) {
 
     /* Create an event handler for accepting new connections in TCP and Unix
      * domain sockets. */
+    //把前面创建的监听socket添加到事件中去，这样server就能接受连接了
     for (j = 0; j < server.ipfd_count; j++) {
         if (aeCreateFileEvent(server.el, server.ipfd[j], AE_READABLE,
             acceptTcpHandler,NULL) == AE_ERR)
@@ -3574,7 +3579,7 @@ int main(int argc, char **argv) {
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
     spt_init(argc, argv);
 #endif
-    setlocale(LC_COLLATE,"");
+    setlocale(LC_COLLATE,"");	/* setlocale用来配置本地化，LC_COLLATE设置字符串比较,""表示使用系统环境变量的local*/
     zmalloc_enable_thread_safeness();
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
     srand(time(NULL)^getpid());

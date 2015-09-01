@@ -668,7 +668,7 @@ struct redisServer {
     int sentinel_mode;          /* True if this instance is a Sentinel. */
     /* Networking */
     int port;                   /* TCP listening port */
-    int tcp_backlog;            /* TCP listen() backlog */
+    int tcp_backlog;            /* TCP listen() backlog，表示listen监听的队列中允许的长度 */
     char *bindaddr[REDIS_BINDADDR_MAX]; /* Addresses we should bind to */
     int bindaddr_count;         /* Number of addresses in server.bindaddr[] */
     char *unixsocket;           /* UNIX socket path */
