@@ -264,6 +264,7 @@ void touchWatchedKey(redisDb *db, robj *key) {
     listNode *ln;
 
     if (dictSize(db->watched_keys) == 0) return;
+	//找到WATCHING这个key的clients的list
     clients = dictFetchValue(db->watched_keys, key);
     if (!clients) return;
 

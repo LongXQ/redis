@@ -73,6 +73,7 @@ redisClient *createClient(int fd) {
         anetEnableTcpNoDelay(NULL,fd);
         if (server.tcpkeepalive)
             anetKeepAlive(NULL,fd,server.tcpkeepalive);
+		//为每个连接的客户创建一个事件
         if (aeCreateFileEvent(server.el,fd,AE_READABLE,
             readQueryFromClient, c) == AE_ERR)
         {
@@ -617,6 +618,7 @@ void acceptTcpHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     REDIS_NOTUSED(privdata);
 
     while(max--) {
+		//cfd表示接收客户端连接创建的socket
         cfd = anetTcpAccept(server.neterr, fd, cip, sizeof(cip), &cport);
         if (cfd == ANET_ERR) {
             if (errno != EWOULDBLOCK)
@@ -1223,6 +1225,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         freeClient(c);
         return;
     }
+	//立马处理客户发过来的请求
     processInputBuffer(c);
     server.current_client = NULL;
 }

@@ -40,15 +40,16 @@ void slotToKeyFlush(void);
 /*-----------------------------------------------------------------------------
  * C-level DB API
  *----------------------------------------------------------------------------*/
-
+//从db数据库中找到键为key的对象
 robj *lookupKey(redisDb *db, robj *key) {
     dictEntry *de = dictFind(db->dict,key->ptr);
     if (de) {
+		//找到key对应的val
         robj *val = dictGetVal(de);
 
         /* Update the access time for the ageing algorithm.
          * Don't do it if we have a saving child, as this will trigger
-         * a copy on write madness. */
+         * a copy on write madness(疯狂，愚蠢). */
         if (server.rdb_child_pid == -1 && server.aof_child_pid == -1)
             val->lru = LRU_CLOCK();
         return val;
@@ -59,7 +60,7 @@ robj *lookupKey(redisDb *db, robj *key) {
 
 robj *lookupKeyRead(redisDb *db, robj *key) {
     robj *val;
-
+	//如果key的expire时间到了，那么从db中删除它
     expireIfNeeded(db,key);
     val = lookupKey(db,key);
     if (val == NULL)
@@ -90,11 +91,13 @@ robj *lookupKeyWriteOrReply(redisClient *c, robj *key, robj *reply) {
  * counter of the value if needed.
  *
  * The program is aborted if the key already exists. */
+//往db数据库中添加key->val对
 void dbAdd(redisDb *db, robj *key, robj *val) {
     sds copy = sdsdup(key->ptr);
     int retval = dictAdd(db->dict, copy, val);
 
     redisAssertWithInfo(NULL,key,retval == REDIS_OK);
+	//如果有client正在等待这个key，则把key加入到ready_list中去
     if (val->type == REDIS_LIST) signalListAsReady(db, key);
     if (server.cluster_enabled) slotToKeyAdd(key);
  }
@@ -104,6 +107,7 @@ void dbAdd(redisDb *db, robj *key, robj *val) {
  * This function does not modify the expire time of the existing key.
  *
  * The program is aborted if the key was not already present. */
+//复写在db中的key对应的val
 void dbOverwrite(redisDb *db, robj *key, robj *val) {
     dictEntry *de = dictFind(db->dict,key->ptr);
 
@@ -127,7 +131,7 @@ void setKey(redisDb *db, robj *key, robj *val) {
     removeExpire(db,key);
     signalModifiedKey(db,key);
 }
-
+//检查key是否存在db中
 int dbExists(redisDb *db, robj *key) {
     return dictFind(db->dict,key->ptr) != NULL;
 }
@@ -136,6 +140,7 @@ int dbExists(redisDb *db, robj *key) {
  * If there are no keys, NULL is returned.
  *
  * The function makes sure to return keys not already expired. */
+ //从db中返回一个随机的key，如果db中没有key，则返回NULL，这个函数保证了不会返回expired的key
 robj *dbRandomKey(redisDb *db) {
     dictEntry *de;
 
@@ -148,6 +153,7 @@ robj *dbRandomKey(redisDb *db) {
 
         key = dictGetKey(de);
         keyobj = createStringObject(key,sdslen(key));
+		//如果随机找到的这个key在db->expires里，那么重新随机另外找一个key
         if (dictFind(db->expires,key)) {
             if (expireIfNeeded(db,keyobj)) {
                 decrRefCount(keyobj);
@@ -159,6 +165,7 @@ robj *dbRandomKey(redisDb *db) {
 }
 
 /* Delete a key, value, and associated expiration entry if any, from the DB */
+//从db中删除key和对应的value
 int dbDelete(redisDb *db, robj *key) {
     /* Deleting an entry from the expires dict will not free the sds of
      * the key, because it is shared with the main dictionary. */
@@ -198,9 +205,12 @@ int dbDelete(redisDb *db, robj *key) {
  * At this point the caller is ready to modify the object, for example
  * using an sdscat() call to append some data, or anything else.
  */
+ //把db中共享的key的val转换为非共享的
 robj *dbUnshareStringValue(redisDb *db, robj *key, robj *o) {
     redisAssert(o->type == REDIS_STRING);
+	//o->refcount!=1说明o是共享的，o->encoding!=REDIS_ENCODING_RAW，说明o的改变都会影响其他用户，因为保存的对象是嵌入到o中的
     if (o->refcount != 1 || o->encoding != REDIS_ENCODING_RAW) {
+		//重新构造一个对象
         robj *decoded = getDecodedObject(o);
         o = createRawStringObject(decoded->ptr, sdslen(decoded->ptr));
         decrRefCount(decoded);
@@ -221,7 +231,7 @@ long long emptyDb(void(callback)(void*)) {
     if (server.cluster_enabled) slotToKeyFlush();
     return removed;
 }
-
+//为client选择db
 int selectDb(redisClient *c, int id) {
     if (id < 0 || id >= server.dbnum)
         return REDIS_ERR;
@@ -820,6 +830,7 @@ void propagateExpire(redisDb *db, robj *key) {
 }
 
 int expireIfNeeded(redisDb *db, robj *key) {
+	//得到key的expire时间
     mstime_t when = getExpire(db,key);
     mstime_t now;
 
