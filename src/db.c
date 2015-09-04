@@ -248,10 +248,11 @@ int selectDb(redisClient *c, int id) {
  * Every time a DB is flushed the function signalFlushDb() is called.
  *----------------------------------------------------------------------------*/
 
+/* 每一次数据库中key被更改了，那么这个函数就会被调用 */
 void signalModifiedKey(redisDb *db, robj *key) {
     touchWatchedKey(db,key);
 }
-
+/* 每一次数据库被flush了，这个函数就会被调用 */
 void signalFlushedDb(int dbid) {
     touchWatchedKeysOnFlush(dbid);
 }
@@ -259,7 +260,8 @@ void signalFlushedDb(int dbid) {
 /*-----------------------------------------------------------------------------
  * Type agnostic commands operating on the key space
  *----------------------------------------------------------------------------*/
-
+ /* 下面都是和db操作有关的一些命令了，因为db又经常是和cluster，RDB，AOF这些是有关联的
+  * 所以最好弄懂了这些在来看这些命令 */
 void flushdbCommand(redisClient *c) {
     server.dirty += dictSize(c->db->dict);
     signalFlushedDb(c->db->id);

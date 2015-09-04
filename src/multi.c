@@ -287,9 +287,11 @@ void touchWatchedKeysOnFlush(int dbid) {
     listNode *ln;
 
     /* For every client, check all the waited keys */
+	//现在li1指向了server.clients的head节点了
     listRewind(server.clients,&li1);
     while((ln = listNext(&li1))) {
         redisClient *c = listNodeValue(ln);
+		//现在li2指向了c->watched_keys的head节点了
         listRewind(c->watched_keys,&li2);
         while((ln = listNext(&li2))) {
             watchedKey *wk = listNodeValue(ln);

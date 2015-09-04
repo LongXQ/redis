@@ -37,12 +37,14 @@ static void setProtocolError(redisClient *c, int pos);
  * allocated objects, however we can't used zmalloc_size() directly on sds
  * strings because of the trick they use to work (the header is before the
  * returned pointer), so we use this helper function. */
+//计算s的大小
 size_t zmalloc_size_sds(sds s) {
     return zmalloc_size(s-sizeof(struct sdshdr));
 }
 
 /* Return the amount of memory used by the sds string at object->ptr
  * for a string object. */
+//返回string对象的ptr所占用的内存大小
 size_t getStringObjectSdsUsedMemory(robj *o) {
     redisAssertWithInfo(NULL,o,o->type == REDIS_STRING);
     switch(o->encoding) {
@@ -60,7 +62,7 @@ void *dupClientReplyValue(void *o) {
 int listMatchObjects(void *a, void *b) {
     return equalStringObjects(a,b);
 }
-
+//当一个client连接server的时候，server为每一个client创建一个redisClient对象用来表示
 redisClient *createClient(int fd) {
     redisClient *c = zmalloc(sizeof(redisClient));
 
@@ -73,7 +75,7 @@ redisClient *createClient(int fd) {
         anetEnableTcpNoDelay(NULL,fd);
         if (server.tcpkeepalive)
             anetKeepAlive(NULL,fd,server.tcpkeepalive);
-		//为每个连接的客户创建一个事件
+		//为每个连接的client创建一个事件
         if (aeCreateFileEvent(server.el,fd,AE_READABLE,
             readQueryFromClient, c) == AE_ERR)
         {
@@ -82,7 +84,7 @@ redisClient *createClient(int fd) {
             return NULL;
         }
     }
-
+	//默认为client选择0号数据库
     selectDb(c,0);
     c->id = server.next_client_id++;
     c->fd = fd;
@@ -150,7 +152,8 @@ redisClient *createClient(int fd) {
  *
  * Typically gets called every time a reply is built, before adding more
  * data to the clients output buffers. If the function returns REDIS_ERR no
- * data should be appended to the output buffers. */
+ * data should be appended to the output buffers(如果这个函数返回REDIS_ERR那么数据不应该追加到输出缓冲中去). */
+/* 这个函数每次在我们将要传送数据给client的时候都会被调用 */
 int prepareClientToWrite(redisClient *c) {
     /* If it's the Lua client we always return ok without installing any
      * handler since there is no socket at all. */
@@ -170,6 +173,7 @@ int prepareClientToWrite(redisClient *c) {
          (c->replstate == REDIS_REPL_ONLINE && !c->repl_put_online_on_ack)))
     {
         /* Try to install the write handler. */
+		//注册可写的事件
         if (aeCreateFileEvent(server.el, c->fd, AE_WRITABLE,
                 sendReplyToClient, c) == AE_ERR)
         {

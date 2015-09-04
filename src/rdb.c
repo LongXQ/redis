@@ -26,7 +26,12 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
+ 
+/*
+ *	这个文件是关于RDB持久化实现的文件，由于和rio相关，
+ *	所以应该先看rio的实现文件再来看RDB的实现文件
+ */
+ 
 #include "redis.h"
 #include "lzf.h"    /* LZF compression library */
 #include "zipmap.h"
@@ -721,8 +726,9 @@ int rdbSave(char *filename) {
     FILE *fp;
     rio rdb;
     int error;
-
+	//根据当前的pid新建一个临时的RDB文件
     snprintf(tmpfile,256,"temp-%d.rdb", (int) getpid());
+	//以可写的模式打开临时的RDB文件
     fp = fopen(tmpfile,"w");
     if (!fp) {
         redisLog(REDIS_WARNING, "Failed opening .rdb for saving: %s",

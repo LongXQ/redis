@@ -58,6 +58,7 @@
 /* ------------------------- Buffer I/O implementation ----------------------- */
 
 /* Returns 1 or 0 for success/failure. */
+//RDB写在buffer里面：从buf中写道rio表示的给予buffer的RDB里面
 static size_t rioBufferWrite(rio *r, const void *buf, size_t len) {
     r->io.buffer.ptr = sdscatlen(r->io.buffer.ptr,(char*)buf,len);
     r->io.buffer.pos += len;
@@ -65,7 +66,9 @@ static size_t rioBufferWrite(rio *r, const void *buf, size_t len) {
 }
 
 /* Returns 1 or 0 for success/failure. */
+//从rio表示的给予buffer的RDB中读取数据到buf中来
 static size_t rioBufferRead(rio *r, void *buf, size_t len) {
+	//如果buffer中没有len字节的数据了，直接返回0表示读取失败
     if (sdslen(r->io.buffer.ptr)-r->io.buffer.pos < len)
         return 0; /* not enough buffer to return len bytes. */
     memcpy(buf,r->io.buffer.ptr+r->io.buffer.pos,len);
@@ -74,6 +77,7 @@ static size_t rioBufferRead(rio *r, void *buf, size_t len) {
 }
 
 /* Returns read/write position in buffer. */
+//返回目前基于buffer的RDB的位置
 static off_t rioBufferTell(rio *r) {
     return r->io.buffer.pos;
 }
@@ -96,7 +100,7 @@ static const rio rioBufferIO = {
     0,              /* read/write chunk size */
     { { NULL, 0 } } /* union for io-specific vars */
 };
-
+//初始化基于buffer的RDB的rio结构
 void rioInitWithBuffer(rio *r, sds s) {
     *r = rioBufferIO;
     r->io.buffer.ptr = s;
@@ -104,8 +108,10 @@ void rioInitWithBuffer(rio *r, sds s) {
 }
 
 /* --------------------- Stdio file pointer implementation ------------------- */
+//下面的所有rio所管理的RDB都是基于文件的RDB
 
 /* Returns 1 or 0 for success/failure. */
+//把buf中的数据写道基于文件的RDB中去
 static size_t rioFileWrite(rio *r, const void *buf, size_t len) {
     size_t retval;
 
@@ -116,6 +122,7 @@ static size_t rioFileWrite(rio *r, const void *buf, size_t len) {
         r->io.file.buffered >= r->io.file.autosync)
     {
         fflush(r->io.file.fp);
+		//fileno函数返回FILE对应的文件描述符fd，aof_fsync的作用是把fd中的数据写到设备中去
         aof_fsync(fileno(r->io.file.fp));
         r->io.file.buffered = 0;
     }
@@ -123,17 +130,20 @@ static size_t rioFileWrite(rio *r, const void *buf, size_t len) {
 }
 
 /* Returns 1 or 0 for success/failure. */
+//从基于文件的RDB中读取数据到buf中来
 static size_t rioFileRead(rio *r, void *buf, size_t len) {
     return fread(buf,len,1,r->io.file.fp);
 }
 
 /* Returns read/write position in file. */
+//返回基于文件的RDB文件目前的位置
 static off_t rioFileTell(rio *r) {
     return ftello(r->io.file.fp);
 }
 
 /* Flushes any buffer to target device if applicable. Returns 1 on success
  * and 0 on failures. */
+//刷新任何用户空间的buffer数据到目标设备中去
 static int rioFileFlush(rio *r) {
     return (fflush(r->io.file.fp) == 0) ? 1 : 0;
 }
@@ -149,7 +159,7 @@ static const rio rioFileIO = {
     0,              /* read/write chunk size */
     { { NULL, 0 } } /* union for io-specific vars */
 };
-
+//初始化RDB基于文件的rio结构
 void rioInitWithFile(rio *r, FILE *fp) {
     *r = rioFileIO;
     r->io.file.fp = fp;
@@ -166,10 +176,13 @@ void rioInitWithFile(rio *r, FILE *fp) {
  * When buf is NULL adn len is 0, the function performs a flush operation
  * if there is some pending buffer, so this function is also used in order
  * to implement rioFdsetFlush(). */
+ //rio中的RDB是基于fd set的。
+ //rioFdsetWrite函数只要成功的写入了一个fd就能返回成功
 static size_t rioFdsetWrite(rio *r, const void *buf, size_t len) {
     ssize_t retval;
     int j;
     unsigned char *p = (unsigned char*) buf;
+	//如果buf==NULL和len==0说明此时没有数据写入，那么这个函数的功能转变为刷新数据的功能了
     int doflush = (buf == NULL && len == 0);
 
     /* To start we always append to our buffer. If it gets larger than
@@ -177,6 +190,7 @@ static size_t rioFdsetWrite(rio *r, const void *buf, size_t len) {
     if (len) {
         r->io.fdset.buf = sdscatlen(r->io.fdset.buf,buf,len);
         len = 0; /* Prevent entering the while belove if we don't flush. */
+		//如果buf中的数据太大，那么还要进行flush操作
         if (sdslen(r->io.fdset.buf) > REDIS_IOBUF_LEN) doflush = 1;
     }
 
@@ -191,6 +205,7 @@ static size_t rioFdsetWrite(rio *r, const void *buf, size_t len) {
     while(len) {
         size_t count = len < 1024 ? len : 1024;
         int broken = 0;
+		//下面这个for循环的意思是写一样的数据到不同的fd中去。相当于一份数据广播到不同的fd中去
         for (j = 0; j < r->io.fdset.numfds; j++) {
             if (r->io.fdset.state[j] != 0) {
                 /* Skip FDs alraedy in error. */
@@ -231,6 +246,7 @@ static size_t rioFdsetWrite(rio *r, const void *buf, size_t len) {
 }
 
 /* Returns 1 or 0 for success/failure. */
+//这种形式的rio不支持读
 static size_t rioFdsetRead(rio *r, void *buf, size_t len) {
     REDIS_NOTUSED(r);
     REDIS_NOTUSED(buf);
@@ -245,6 +261,7 @@ static off_t rioFdsetTell(rio *r) {
 
 /* Flushes any buffer to target device if applicable. Returns 1 on success
  * and 0 on failures. */
+//刷新buf中的数据到设备中去
 static int rioFdsetFlush(rio *r) {
     /* Our flush is implemented by the write method, that recognizes a
      * buffer set to NULL with a count of zero as a flush request. */
@@ -286,6 +303,7 @@ void rioFreeFdset(rio *r) {
 
 /* This function can be installed both in memory and file streams when checksum
  * computation is needed. */
+//更新rio的checksum
 void rioGenericUpdateChecksum(rio *r, const void *buf, size_t len) {
     r->cksum = crc64(r->cksum,buf,len);
 }
@@ -298,6 +316,7 @@ void rioGenericUpdateChecksum(rio *r, const void *buf, size_t len) {
  * buffers sometimes the OS buffers way too much, resulting in too many
  * disk I/O concentrated in very little time. When we fsync in an explicit
  * way instead the I/O pressure is more distributed across time. */
+ //设置rio的autosync
 void rioSetAutoSync(rio *r, off_t bytes) {
     redisAssert(r->read == rioFileIO.read);
     r->io.file.autosync = bytes;
@@ -306,7 +325,7 @@ void rioSetAutoSync(rio *r, off_t bytes) {
 /* --------------------------- Higher level interface --------------------------
  *
  * The following higher level functions use lower level rio.c functions to help
- * generating the Redis protocol for the Append Only File. */
+ * generating the Redis protocol for the Append Only File(AOF). */
 
 /* Write multi bulk count in the format: "*<count>\r\n". */
 size_t rioWriteBulkCount(rio *r, char prefix, int count) {

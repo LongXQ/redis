@@ -378,6 +378,7 @@ err:
 }
 
 /* Return the UNIX time in microseconds */
+/* 以微秒返回unix time*/
 long long ustime(void) {
     struct timeval tv;
     long long ust;
@@ -389,6 +390,7 @@ long long ustime(void) {
 }
 
 /* Return the UNIX time in milliseconds */
+/* 以毫秒返回现在的unix time*/
 long long mstime(void) {
     return ustime()/1000;
 }

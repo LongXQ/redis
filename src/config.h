@@ -83,6 +83,7 @@
 #endif
 
 /* Define aof_fsync to fdatasync() in Linux and fsync() for all the rest */
+//fsync()和fdataasync()函数的作用是刷新内核中的数据到设备中去
 #ifdef __linux__
 #define aof_fsync fdatasync
 #else

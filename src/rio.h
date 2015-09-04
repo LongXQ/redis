@@ -28,6 +28,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/*
+ * rio是和RDB持久化有关的一些功能实现
+ */
 
 #ifndef __REDIS_RIO_H
 #define __REDIS_RIO_H
@@ -37,7 +40,7 @@
 #include "sds.h"
 
 struct _rio {
-    /* Backend functions.
+    /* Backend(后端) functions.
      * Since this functions do not tolerate short writes or reads the return
      * value is simplified to: zero on error, non zero on complete success. */
     size_t (*read)(struct _rio *, void *buf, size_t len);
@@ -71,7 +74,7 @@ struct _rio {
         struct {
             FILE *fp;
             off_t buffered; /* Bytes written since last fsync. */
-            off_t autosync; /* fsync after 'autosync' bytes written. */
+            off_t autosync; /* fsync after 'autosync' bytes written(autosync记录了已经同步到设备的字节数). */
         } file;
         /* Multiple FDs target (used to write to N sockets). */
         struct {
@@ -89,9 +92,12 @@ typedef struct _rio rio;
 /* The following functions are our interface with the stream. They'll call the
  * actual implementation of read / write / tell, and will update the checksum
  * if needed. */
-
+ 
+/* rio写函数，背后调用的是rio::write的实现
+ * 把buf中的内容写到rio表示的流中去 */
 static inline size_t rioWrite(rio *r, const void *buf, size_t len) {
     while (len) {
+		//bytes_to_write表示一次写的最大字节数
         size_t bytes_to_write = (r->max_processing_chunk && r->max_processing_chunk < len) ? r->max_processing_chunk : len;
         if (r->update_cksum) r->update_cksum(r,buf,bytes_to_write);
         if (r->write(r,buf,bytes_to_write) == 0)
@@ -102,7 +108,8 @@ static inline size_t rioWrite(rio *r, const void *buf, size_t len) {
     }
     return 1;
 }
-
+/* rio读函数，背后调用的是rio::read的实现
+ * 从rio表示的流中读取内容到buf中来 */
 static inline size_t rioRead(rio *r, void *buf, size_t len) {
     while (len) {
         size_t bytes_to_read = (r->max_processing_chunk && r->max_processing_chunk < len) ? r->max_processing_chunk : len;
