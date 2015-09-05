@@ -33,7 +33,7 @@
  */
  
 #include "redis.h"
-#include "lzf.h"    /* LZF compression library */
+#include "lzf.h"    /* LZF compression library(LZF是用来压缩字符串的算法) */
 #include "zipmap.h"
 #include "endianconv.h"
 
@@ -640,19 +640,22 @@ int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val,
  * When the function returns REDIS_ERR and if 'error' is not NULL, the
  * integer pointed by 'error' is set to the value of errno just after the I/O
  * error. */
+//这个函数的作用就是:产生一个数据库的的RDB格式的文件，然后写入到redis的I/O通道(rio关联的)中去
 int rdbSaveRio(rio *rdb, int *error) {
     dictIterator *di = NULL;
     dictEntry *de;
     char magic[10];
     int j;
+	//取得现在的时间
     long long now = mstime();
     uint64_t cksum;
-
+	//如果打开了rdb_checksum
     if (server.rdb_checksum)
         rdb->update_cksum = rioGenericUpdateChecksum;
+	//生成RDB文件的魔数和版本号
     snprintf(magic,sizeof(magic),"REDIS%04d",REDIS_RDB_VERSION);
     if (rdbWriteRaw(rdb,magic,9) == -1) goto werr;
-
+	//依次遍历每一个数据库
     for (j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
         dict *d = db->dict;
@@ -661,10 +664,12 @@ int rdbSaveRio(rio *rdb, int *error) {
         if (!di) return REDIS_ERR;
 
         /* Write the SELECT DB opcode */
+		//写入数据库的号码
         if (rdbSaveType(rdb,REDIS_RDB_OPCODE_SELECTDB) == -1) goto werr;
         if (rdbSaveLen(rdb,j) == -1) goto werr;
 
         /* Iterate this DB writing every entry */
+		//遍历当前数据库的hash table中的每一个entry
         while((de = dictNext(di)) != NULL) {
             sds keystr = dictGetKey(de);
             robj key, *o = dictGetVal(de);
@@ -672,6 +677,7 @@ int rdbSaveRio(rio *rdb, int *error) {
 
             initStaticStringObject(key,keystr);
             expire = getExpire(db,&key);
+			//存储当前的key->value键值对到RDB文件中去
             if (rdbSaveKeyValuePair(rdb,&key,o,expire,now) == -1) goto werr;
         }
         dictReleaseIterator(di);
@@ -685,6 +691,7 @@ int rdbSaveRio(rio *rdb, int *error) {
      * loading code skips the check in this case. */
     cksum = rdb->cksum;
     memrev64ifbe(&cksum);
+	//写入checksum
     if (rioWrite(rdb,&cksum,8) == 0) goto werr;
     return REDIS_OK;
 
@@ -721,12 +728,13 @@ werr: /* Write error. */
 }
 
 /* Save the DB on disk. Return REDIS_ERR on error, REDIS_OK on success. */
+//把DB上的数据以RDB格式存储到磁盘上去
 int rdbSave(char *filename) {
     char tmpfile[256];
     FILE *fp;
     rio rdb;
     int error;
-	//根据当前的pid新建一个临时的RDB文件
+	//首先根据当前的pid新建一个临时的RDB文件
     snprintf(tmpfile,256,"temp-%d.rdb", (int) getpid());
 	//以可写的模式打开临时的RDB文件
     fp = fopen(tmpfile,"w");
@@ -735,20 +743,23 @@ int rdbSave(char *filename) {
             strerror(errno));
         return REDIS_ERR;
     }
-
+	//把rio的数据流和fp文件进行关联
     rioInitWithFile(&rdb,fp);
+	//rdbSaveRio函数是把数据写入到磁盘中的主函数
     if (rdbSaveRio(&rdb,&error) == REDIS_ERR) {
         errno = error;
         goto werr;
     }
 
     /* Make sure data will not remain on the OS's output buffers */
+	//确保没有数据残留在buffer中了，全部写到磁盘中去了
     if (fflush(fp) == EOF) goto werr;
     if (fsync(fileno(fp)) == -1) goto werr;
     if (fclose(fp) == EOF) goto werr;
 
     /* Use RENAME to make sure the DB file is changed atomically only
-     * if the generate DB file is ok. */
+     * if(只要，只有) the generate DB file is ok. */
+    //进行文件替换，把临时生成的RDB文件替换为正式的RDB文件，并且进行改名
     if (rename(tmpfile,filename) == -1) {
         redisLog(REDIS_WARNING,"Error moving temp DB file on the final destination: %s", strerror(errno));
         unlink(tmpfile);
@@ -770,7 +781,7 @@ werr:
 int rdbSaveBackground(char *filename) {
     pid_t childpid;
     long long start;
-
+	//检查当前是否存在一个子进程在执行存储RDB的工作了，如果已经有了，则直接退出函数
     if (server.rdb_child_pid != -1) return REDIS_ERR;
 
     server.dirty_before_bgsave = server.dirty;
@@ -781,6 +792,7 @@ int rdbSaveBackground(char *filename) {
         int retval;
 
         /* Child */
+		//因为子进程不需要这些文件描述符，所以关闭他们
         closeListeningSockets(0);
         redisSetProcTitle("redis-rdb-bgsave");
         retval = rdbSave(filename);
@@ -796,7 +808,7 @@ int rdbSaveBackground(char *filename) {
         exitFromChild((retval == REDIS_OK) ? 0 : 1);
     } else {
         /* Parent */
-        server.stat_fork_time = ustime()-start;
+        server.stat_fork_time = ustime()-start;	/* fork所花费的时间 */
         server.stat_fork_rate = (double) zmalloc_used_memory() * 1000000 / server.stat_fork_time / (1024*1024*1024); /* GB per second. */
         latencyAddSampleIfNeeded("fork",server.stat_fork_time/1000);
         if (childpid == -1) {
@@ -1527,6 +1539,7 @@ int rdbSaveToSlavesSockets(void) {
     return REDIS_OK; /* unreached */
 }
 
+//执行SAVE命令，也就是把目前redis实例上的数据同步到磁盘的RDB文件中去
 void saveCommand(redisClient *c) {
     if (server.rdb_child_pid != -1) {
         addReplyError(c,"Background save already in progress");
@@ -1538,7 +1551,7 @@ void saveCommand(redisClient *c) {
         addReply(c,shared.err);
     }
 }
-
+//在后台执行SAVE工作
 void bgsaveCommand(redisClient *c) {
     if (server.rdb_child_pid != -1) {
         addReplyError(c,"Background save already in progress");

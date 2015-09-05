@@ -26,6 +26,49 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+/*
+	.RDB文件的格式:
+		----------------------------
+		52 45 44 49 53				#Magic String "REDIS"
+		30 30 30 33 				#RDB Version Number in big endian. In this case, version = 0003 = 3
+		----------------------------
+		FE 00   					#FE = code that indicates database selector. db number = 00
+		----------------------------
+		FD $unsigned int 			#FD indicates "expiry time in seconds". After that, expiry time is read as a 4 byte unsigned int
+		$value-type 				#1 byte flag indicating the type of value - set, map, sorted set etc.
+		$string-encoded-key 		#The key, encoded as a redis string
+		$encoded-value				#The value. Encoding depends on $value-type
+		----------------------------
+		FC $unsigned long  			#FC indicates "expiry time in ms". After that, expiry time is read as a 8 byte unsigned long
+		$value-type 
+		$string-encoded-key
+		$encoded-value   
+		----------------------------
+		$value-type					
+		$string-encoded-key
+		$encoded-value
+		----------------------------
+		...   
+
+
+		FF   						#End of RDB file indicator
+		8 byte checksum   			#CRC 32 checksum of the entire file.
+		
+*/
+
+/*
+  $value-type的格式如下:
+		0 = “String Encoding”
+		1 = “List Encoding”
+		2 = “Set Encoding”
+		3 = “Sorted Set Encoding”
+		4 = “Hash Encoding”
+		9 = “Zipmap Encoding”
+		10 = “Ziplist Encoding”
+		11 = “Intset Encoding”
+		12 = “Sorted Set in Ziplist Encoding”
+		13 = “Hashmap in Ziplist Encoding” (Introduced in rdb version 4)
+*/
 
 #ifndef __REDIS_RDB_H
 #define __REDIS_RDB_H
@@ -53,10 +96,11 @@
  *
  * Lengths up to 63 are stored using a single byte, most DB keys, and may
  * values, will fit inside. */
-#define REDIS_RDB_6BITLEN 0
-#define REDIS_RDB_14BITLEN 1
-#define REDIS_RDB_32BITLEN 2
-#define REDIS_RDB_ENCVAL 3
+//RDB中的value都是以prefixed-length来进行编码的，也就是说所有的value长度编码都在value的首部
+#define REDIS_RDB_6BITLEN 0		/* 要用6个比特位来表示长度(1个字节) */
+#define REDIS_RDB_14BITLEN 1	/* 要用14个比特位来表示长度(2个字节) */
+#define REDIS_RDB_32BITLEN 2	/* 要用32个比特位来表示长度(5个字节)*/
+#define REDIS_RDB_ENCVAL 3		/* 没有长度表示，直接编码为内容(头两个比特位为11的情况) */
 #define REDIS_RDB_LENERR UINT_MAX
 
 /* When a length of a string object stored on disk has the first two bits

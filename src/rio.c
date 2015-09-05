@@ -328,6 +328,7 @@ void rioSetAutoSync(rio *r, off_t bytes) {
  * generating the Redis protocol for the Append Only File(AOF). */
 
 /* Write multi bulk count in the format: "*<count>\r\n". */
+//把如下形式的数据写道rio关联的流中去:"prefix<count>\r\n" 
 size_t rioWriteBulkCount(rio *r, char prefix, int count) {
     char cbuf[128];
     int clen;
@@ -341,6 +342,8 @@ size_t rioWriteBulkCount(rio *r, char prefix, int count) {
 }
 
 /* Write binary-safe string in the format: "$<count>\r\n<payload>\r\n". */
+/* 把buf中的数据以如下形式(RESP协议中的bulk string格式)写到rio流中去:
+ * "$<len>\r\n<buf>\r\n" */
 size_t rioWriteBulkString(rio *r, const char *buf, size_t len) {
     size_t nwritten;
 
@@ -351,6 +354,7 @@ size_t rioWriteBulkString(rio *r, const char *buf, size_t len) {
 }
 
 /* Write a long long value in format: "$<count>\r\n<payload>\r\n". */
+//把数字l转换成string，在以如下格式写到rio流中去:"$llen\r\n<lbuf>\r\n"
 size_t rioWriteBulkLongLong(rio *r, long long l) {
     char lbuf[32];
     unsigned int llen;
@@ -360,6 +364,7 @@ size_t rioWriteBulkLongLong(rio *r, long long l) {
 }
 
 /* Write a double value in the format: "$<count>\r\n<payload>\r\n" */
+//把数字d转换成string，在以如下格式写到rio流中去:"$dlen\r\n<dbuf>\r\n"
 size_t rioWriteBulkDouble(rio *r, double d) {
     char dbuf[128];
     unsigned int dlen;
