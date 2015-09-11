@@ -126,7 +126,9 @@ redisClient *createClient(int fd) {
     c->peerid = NULL;
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
+	//把新建的client添加到server.clients链表里面去
     if (fd != -1) listAddNodeTail(server.clients,c);
+	//初始化事务相关的属性
     initClientMultiState(c);
     return c;
 }
@@ -205,7 +207,7 @@ robj *dupLastObjectIfNeeded(list *reply) {
 /* -----------------------------------------------------------------------------
  * Low level functions to add more data to output buffers.
  * -------------------------------------------------------------------------- */
-
+//添加数据到buf中
 int _addReplyToBuffer(redisClient *c, char *s, size_t len) {
     size_t available = sizeof(c->buf)-c->bufpos;
 
@@ -213,6 +215,7 @@ int _addReplyToBuffer(redisClient *c, char *s, size_t len) {
 
     /* If there already are entries in the reply list, we cannot
      * add anything more to the static buffer. */
+     //如果reply链表中有数据了，那么不能往buf中添加数据
     if (listLength(c->reply) > 0) return REDIS_ERR;
 
     /* Check that the buffer has enough space available for this string. */

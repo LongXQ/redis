@@ -3537,6 +3537,7 @@ int checkForSentinelMode(int argc, char **argv) {
 }
 
 /* Function called at startup to load RDB or AOF file in memory. */
+//在redis启动的时候装载RDB文件或者AOF文件到内存中来
 void loadDataFromDisk(void) {
     long long start = ustime();
     if (server.aof_state == REDIS_AOF_ON) {

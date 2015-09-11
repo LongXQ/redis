@@ -1099,6 +1099,7 @@ robj *rdbLoadObject(int rdbtype, rio *rdb) {
 
 /* Mark that we are loading in the global state and setup the fields
  * needed to provide loading stats. */
+/* 在装载数据内容开始前，记录下装载的全局状态 */
 void startLoading(FILE *fp) {
     struct stat sb;
 
@@ -1109,7 +1110,7 @@ void startLoading(FILE *fp) {
     if (fstat(fileno(fp), &sb) == -1) {
         server.loading_total_bytes = 0;
     } else {
-        server.loading_total_bytes = sb.st_size;
+        server.loading_total_bytes = sb.st_size;	/* st_size表示文件的大小 */
     }
 }
 
@@ -1158,6 +1159,7 @@ int rdbLoad(char *filename) {
     rioInitWithFile(&rdb,fp);
     rdb.update_cksum = rdbLoadProgressCallback;
     rdb.max_processing_chunk = server.loading_process_events_interval_bytes;
+	//装载RDB文件的魔数和版本号
     if (rioRead(&rdb,buf,9) == 0) goto eoferr;
     buf[9] = '\0';
     if (memcmp(buf,"REDIS",5) != 0) {
@@ -1166,6 +1168,7 @@ int rdbLoad(char *filename) {
         errno = EINVAL;
         return REDIS_ERR;
     }
+	//rdbver代表了版本号
     rdbver = atoi(buf+5);
     if (rdbver < 1 || rdbver > REDIS_RDB_VERSION) {
         fclose(fp);
@@ -1219,12 +1222,14 @@ int rdbLoad(char *filename) {
          * received from the master. In the latter case, the master is
          * responsible for key expiry. If we would expire keys here, the
          * snapshot taken by the master may not be reflected on the slave. */
+         //检查当前的key是否早已经过期了(expired)
         if (server.masterhost == NULL && expiretime != -1 && expiretime < now) {
             decrRefCount(key);
             decrRefCount(val);
             continue;
         }
         /* Add the new object in the hash table */
+		//添加key->value到数据库中去
         dbAdd(db,key,val);
 
         /* Set the expire time if needed */
@@ -1233,6 +1238,7 @@ int rdbLoad(char *filename) {
         decrRefCount(key);
     }
     /* Verify the checksum if RDB version is >= 5 */
+	//验证checksum:检查RDB文件中读出来的checksum和计算得到的rdb.cksum是否相同
     if (rdbver >= 5 && server.rdb_checksum) {
         uint64_t cksum, expected = rdb.cksum;
 

@@ -27,6 +27,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/*
+	这个文件是关于redis事务的实现
+*/
 #include "redis.h"
 
 /* ================================ MULTI/EXEC ============================== */
@@ -206,6 +209,7 @@ void watchForKey(redisClient *c, robj *key) {
     watchedKey *wk;
 
     /* Check if we are already watching for this key */
+	//检查key是否早已经watched了
     listRewind(c->watched_keys,&li);
     while((ln = listNext(&li))) {
         wk = listNodeValue(ln);
@@ -213,6 +217,7 @@ void watchForKey(redisClient *c, robj *key) {
             return; /* Key already watched */
     }
     /* This key is not already watched in this DB. Let's add it */
+	//添加到db的watch_keys链表中
     clients = dictFetchValue(c->db->watched_keys,key);
     if (!clients) {
         clients = listCreate();
@@ -221,6 +226,7 @@ void watchForKey(redisClient *c, robj *key) {
     }
     listAddNodeTail(clients,c);
     /* Add the new key to the list of keys watched by this client */
+	//添加到client的watched_keys链表中
     wk = zmalloc(sizeof(*wk));
     wk->key = key;
     wk->db = c->db;

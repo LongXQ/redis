@@ -61,9 +61,9 @@
 #include "redis.h"
 #include "bio.h"
 
-static pthread_t bio_threads[REDIS_BIO_NUM_OPS];
-static pthread_mutex_t bio_mutex[REDIS_BIO_NUM_OPS];
-static pthread_cond_t bio_condvar[REDIS_BIO_NUM_OPS];
+static pthread_t bio_threads[REDIS_BIO_NUM_OPS];		/* pthread_t为线程ID */
+static pthread_mutex_t bio_mutex[REDIS_BIO_NUM_OPS];	/* pthread_mutex_t为互斥锁 */
+static pthread_cond_t bio_condvar[REDIS_BIO_NUM_OPS];	/* pthread_cond_t为条件变量 */
 static list *bio_jobs[REDIS_BIO_NUM_OPS];
 /* The following array is used to hold the number of pending jobs for every
  * OP type. This allows us to export the bioPendingJobsOfType() API that is
@@ -71,10 +71,12 @@ static list *bio_jobs[REDIS_BIO_NUM_OPS];
  * objects shared with the background thread. The main thread will just wait
  * that there are no longer jobs of this type to be executed before performing
  * the sensible operation. This data is also useful for reporting. */
+/* bio_pending为每一种操作类型的待完成任务的数量 */
 static unsigned long long bio_pending[REDIS_BIO_NUM_OPS];
 
 /* This structure represents a background Job. It is only used locally to this
  * file as the API does not expose the internals at all. */
+/* 这个结构代表了一个后台任务 */
 struct bio_job {
     time_t time; /* Time at which the job was created. */
     /* Job specific arguments pointers. If we need to pass more than three
@@ -86,9 +88,11 @@ void *bioProcessBackgroundJobs(void *arg);
 
 /* Make sure we have enough stack to perform all the things we do in the
  * main thread. */
-#define REDIS_THREAD_STACK_SIZE (1024*1024*4)
+/* 确定在主线程中有足够的栈空间去执行所有的事情 */
+#define REDIS_THREAD_STACK_SIZE (1024*1024*4)	/* 4M */
 
-/* Initialize the background system, spawning the thread. */
+/* Initialize the background system, spawning(大量生成) the thread. */
+//初始化后台系统，大量生成线程
 void bioInit(void) {
     pthread_attr_t attr;
     pthread_t thread;
@@ -96,6 +100,7 @@ void bioInit(void) {
     int j;
 
     /* Initialization of state vars and objects */
+	//初始化一些变量
     for (j = 0; j < REDIS_BIO_NUM_OPS; j++) {
         pthread_mutex_init(&bio_mutex[j],NULL);
         pthread_cond_init(&bio_condvar[j],NULL);
@@ -113,16 +118,18 @@ void bioInit(void) {
     /* Ready to spawn our threads. We use the single argument the thread
      * function accepts in order to pass the job ID the thread is
      * responsible of. */
+    //设置的线程函数只接受唯一的参数，这个参数是后台任务的id编号
     for (j = 0; j < REDIS_BIO_NUM_OPS; j++) {
         void *arg = (void*)(unsigned long) j;
         if (pthread_create(&thread,&attr,bioProcessBackgroundJobs,arg) != 0) {
             redisLog(REDIS_WARNING,"Fatal: Can't initialize Background Jobs.");
             exit(1);
         }
+		//存储线程ID
         bio_threads[j] = thread;
     }
 }
-
+//为指定类型的任务创建后台任务
 void bioCreateBackgroundJob(int type, void *arg1, void *arg2, void *arg3) {
     struct bio_job *job = zmalloc(sizeof(*job));
 
@@ -133,12 +140,13 @@ void bioCreateBackgroundJob(int type, void *arg1, void *arg2, void *arg3) {
     pthread_mutex_lock(&bio_mutex[type]);
     listAddNodeTail(bio_jobs[type],job);
     bio_pending[type]++;
-    pthread_cond_signal(&bio_condvar[type]);
+    pthread_cond_signal(&bio_condvar[type]);	/* 唤醒阻塞在bio_condvar[type]变量上的线程，一次只能唤醒一个线程 */
     pthread_mutex_unlock(&bio_mutex[type]);
 }
-
+//处理后台任务的函数
 void *bioProcessBackgroundJobs(void *arg) {
     struct bio_job *job;
+	//获取要处理任务的类型
     unsigned long type = (unsigned long) arg;
     sigset_t sigset;
 
@@ -190,6 +198,7 @@ void *bioProcessBackgroundJobs(void *arg) {
 }
 
 /* Return the number of pending jobs of the specified type. */
+//返回指定类型的后台任务的数量
 unsigned long long bioPendingJobsOfType(int type) {
     unsigned long long val;
     pthread_mutex_lock(&bio_mutex[type]);

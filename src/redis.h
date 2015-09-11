@@ -766,7 +766,7 @@ struct redisServer {
     int aof_rewrite_scheduled;      /* Rewrite once BGSAVE terminates. */
     pid_t aof_child_pid;            /* PID if rewriting process */
     list *aof_rewrite_buf_blocks;   /* Hold changes during an AOF rewrite. */
-    sds aof_buf;      /* AOF buffer, written before entering the event loop */
+    sds aof_buf;      /* AOF buffer, written before entering the event loop(AOF buffer,用来缓存即将写入AOF文件里面的命令) */
     int aof_fd;       /* File descriptor of currently selected AOF file */
     int aof_selected_db; /* Currently selected DB in AOF */
     time_t aof_flush_postponed_start; /* UNIX time of postponed AOF flush */
@@ -780,12 +780,13 @@ struct redisServer {
     int aof_last_write_errno;       /* Valid if aof_last_write_status is ERR */
     int aof_load_truncated;         /* Don't stop on unexpected AOF EOF. */
     /* AOF pipes used to communicate between parent and child during rewrite. */
-    int aof_pipe_write_data_to_child;
-    int aof_pipe_read_data_from_parent;
-    int aof_pipe_write_ack_to_parent;
-    int aof_pipe_read_ack_from_child;
-    int aof_pipe_write_ack_to_child;
-    int aof_pipe_read_ack_from_parent;
+	/* AOF管道，在重写期间给父进程和子进程进行通信用的 */
+    int aof_pipe_write_data_to_child;	/* 写数据到子进程的管道fd */
+    int aof_pipe_read_data_from_parent;	/* 从父进程读数据的管道fd */
+    int aof_pipe_write_ack_to_parent;	/* 写ack给父进程的管道fd */
+    int aof_pipe_read_ack_from_child;	/* 从子进程读ack的管道fd */
+    int aof_pipe_write_ack_to_child;	/* 写ack给子进程的管道fd */
+    int aof_pipe_read_ack_from_parent;	/* 从父进程读ack的管道fd */
     int aof_stop_sending_diff;     /* If true stop sending accumulated diffs
                                       to child process. */
     sds aof_child_diff;             /* AOF diff accumulator child side. */
@@ -906,7 +907,7 @@ struct redisServer {
 	
     /* Pubsub */
 	/* 发布订阅功能 */
-    dict *pubsub_channels;  /* Map channels to list of subscribed clients */
+    dict *pubsub_channels;  /* Map channels to list of subscribed clients(channels->client映射) */
     list *pubsub_patterns;  /* A list of pubsub_patterns */
     int notify_keyspace_events; /* Events to propagate via Pub/Sub. This is an
                                    xor of REDIS_NOTIFY... flags. */
