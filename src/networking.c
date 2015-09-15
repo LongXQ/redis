@@ -906,6 +906,7 @@ void sendReplyToClient(aeEventLoop *el, int fd, void *privdata, int mask) {
 }
 
 /* resetClient prepare the client to process the next command */
+//重置client，为了准备处理下一条命令
 void resetClient(redisClient *c) {
     redisCommandProc *prevcmd = c->cmd ? c->cmd->proc : NULL;
 
@@ -992,7 +993,7 @@ static void setProtocolError(redisClient *c, int pos) {
     c->flags |= REDIS_CLOSE_AFTER_REPLY;
     sdsrange(c->querybuf,pos,-1);
 }
-
+//这个函数的作用时解析命令存放到argv里面去
 int processMultibulkBuffer(redisClient *c) {
     char *newline = NULL;
     int pos = 0, ok;
@@ -1019,6 +1020,7 @@ int processMultibulkBuffer(redisClient *c) {
         /* We know for sure there is a whole line since newline != NULL,
          * so go ahead and find out the multi bulk length. */
         redisAssertWithInfo(c,NULL,c->querybuf[0] == '*');
+		//读取multi bulk的长度
         ok = string2ll(c->querybuf+1,newline-(c->querybuf+1),&ll);
         if (!ok || ll > 1024*1024) {
             addReplyError(c,"Protocol error: invalid multibulk length");
@@ -1130,7 +1132,7 @@ int processMultibulkBuffer(redisClient *c) {
     /* Still not read to process the command */
     return REDIS_ERR;
 }
-
+//这个函数的作用是处理client中querybuf中的数据
 void processInputBuffer(redisClient *c) {
     /* Keep processing while there is something in the input buffer */
     while(sdslen(c->querybuf)) {
@@ -1146,6 +1148,7 @@ void processInputBuffer(redisClient *c) {
         if (c->flags & REDIS_CLOSE_AFTER_REPLY) return;
 
         /* Determine request type when unknown. */
+		//决定request的类型
         if (!c->reqtype) {
             if (c->querybuf[0] == '*') {
                 c->reqtype = REDIS_REQ_MULTIBULK;
@@ -1153,7 +1156,7 @@ void processInputBuffer(redisClient *c) {
                 c->reqtype = REDIS_REQ_INLINE;
             }
         }
-
+		//然后根据不同的类型进一步调用不同的处理函数
         if (c->reqtype == REDIS_REQ_INLINE) {
             if (processInlineBuffer(c) != REDIS_OK) break;
         } else if (c->reqtype == REDIS_REQ_MULTIBULK) {
@@ -1172,7 +1175,7 @@ void processInputBuffer(redisClient *c) {
         }
     }
 }
-
+//和fd关联的事件处理函数，用来读取fd中的请求
 void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     redisClient *c = (redisClient*) privdata;
     int nread, readlen;
@@ -1198,6 +1201,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     qblen = sdslen(c->querybuf);
     if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;
+	//readlen为需要读取的字节数大小，下面这句话的意思是调整buff的大小以便能读取readlen字节的数据
     c->querybuf = sdsMakeRoomFor(c->querybuf, readlen);
     nread = read(fd, c->querybuf+qblen, readlen);
     if (nread == -1) {
@@ -1222,6 +1226,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         server.current_client = NULL;
         return;
     }
+	//如果现在buff中的数据大于系统的max值，那么返回错误
     if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
         sds ci = catClientInfoString(sdsempty(),c), bytes = sdsempty();
 

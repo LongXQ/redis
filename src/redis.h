@@ -774,7 +774,7 @@ struct redisServer {
     time_t aof_rewrite_time_last;   /* Time used by last AOF rewrite run. */
     time_t aof_rewrite_time_start;  /* Current AOF rewrite start time. */
     int aof_lastbgrewrite_status;   /* REDIS_OK or REDIS_ERR */
-    unsigned long aof_delayed_fsync;  /* delayed AOF fsync() counter */
+    unsigned long aof_delayed_fsync;  /* delayed AOF fsync() counter(被推迟的fsync的计数器) */
     int aof_rewrite_incremental_fsync;/* fsync incrementally while rewriting? */
     int aof_last_write_status;      /* REDIS_OK or REDIS_ERR */
     int aof_last_write_errno;       /* Valid if aof_last_write_status is ERR */
@@ -837,7 +837,7 @@ struct redisServer {
                                        Only valid if server.slaves len is 0. */
     int repl_min_slaves_to_write;   /* Min number of slaves to write. */
     int repl_min_slaves_max_lag;    /* Max lag of <count> slaves to write. */
-    int repl_good_slaves_count;     /* Number of slaves with lag <= max_lag. */
+    int repl_good_slaves_count;     /* Number of slaves with lag <= max_lag.(记录着目前状况良好的slaves的数量) */
     int repl_diskless_sync;         /* Send RDB to slaves sockets directly. */
     int repl_diskless_sync_delay;   /* Delay to start a diskless repl BGSAVE. */
 	
@@ -858,7 +858,7 @@ struct redisServer {
     int repl_transfer_fd;    /* Slave -> Master SYNC temp file descriptor */
     char *repl_transfer_tmpfile; /* Slave-> master SYNC temp file name */
     time_t repl_transfer_lastio; /* Unix time of the latest read, for timeout */
-    int repl_serve_stale_data; /* Serve stale data when link is down? */
+    int repl_serve_stale_data; /* Serve stale data when link is down?(当link处于断开的状态时，是否服务过时的数据) */
     int repl_slave_ro;          /* Slave is read only? */
     time_t repl_down_since; /* Unix time at which link with master went down */
     int repl_disable_tcp_nodelay;   /* Disable TCP_NODELAY after SYNC? */

@@ -122,6 +122,7 @@ void freeReplicationBacklog(void) {
  * This function also increments the global replication offset stored at
  * server.master_repl_offset, because there is no case where we want to feed
  * the backlog without incrementing the buffer. */
+ //添加数据到replication backlog中去
 void feedReplicationBacklog(void *ptr, size_t len) {
     unsigned char *p = ptr;
 
@@ -163,7 +164,7 @@ void feedReplicationBacklogWithObject(robj *o) {
     }
     feedReplicationBacklog(p,len);
 }
-
+//把命令传递给每一个slave
 void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
     listNode *ln;
     listIter li;
@@ -178,6 +179,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
     redisAssert(!(listLength(slaves) != 0 && server.repl_backlog == NULL));
 
     /* Send SELECT command to every slave if needed. */
+	//构造一条SELECT命令，添加到backlog中去
     if (server.slaveseldb != dictid) {
         robj *selectcmd;
 
@@ -198,6 +200,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         if (server.repl_backlog) feedReplicationBacklogWithObject(selectcmd);
 
         /* Send it to slaves. */
+		//把这条SELECT命令发送给每个slave
         listRewind(slaves,&li);
         while((ln = listNext(&li))) {
             redisClient *slave = ln->value;
@@ -210,6 +213,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
     server.slaveseldb = dictid;
 
     /* Write the command to the replication backlog if any. */
+	//把命令写进backlog中去
     if (server.repl_backlog) {
         char aux[REDIS_LONGSTR_SIZE+3];
 
@@ -237,6 +241,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
     }
 
     /* Write the command to every slave. */
+	//把命令写到slave中去
     listRewind(server.slaves,&li);
     while((ln = listNext(&li))) {
         redisClient *slave = ln->value;
@@ -257,7 +262,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
             addReplyBulk(slave,argv[j]);
     }
 }
-
+//把这条命令发给每个监视器
 void replicationFeedMonitors(redisClient *c, list *monitors, int dictid, robj **argv, int argc) {
     listNode *ln;
     listIter li;

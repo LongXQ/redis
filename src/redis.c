@@ -1262,6 +1262,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 /* This function gets called every time Redis is entering the
  * main loop of the event driven library, that is, before to sleep
  * for ready file descriptors. */
+//这个函数每次在redis进入事件主循环的时候调用
 void beforeSleep(struct aeEventLoop *eventLoop) {
     REDIS_NOTUSED(eventLoop);
 
@@ -2050,6 +2051,7 @@ void call(redisClient *c, int flags) {
         !server.loading &&
         !(c->cmd->flags & (REDIS_CMD_SKIP_MONITOR|REDIS_CMD_ADMIN)))
     {
+    	//把命令发送给每个监视器
         replicationFeedMonitors(c,server.monitors,c->db->id,c->argv,c->argc);
     }
 
@@ -2058,6 +2060,7 @@ void call(redisClient *c, int flags) {
     redisOpArrayInit(&server.also_propagate);
     dirty = server.dirty;
     start = ustime();
+	//执行命令
     c->cmd->proc(c);
     duration = ustime()-start;
     dirty = server.dirty-dirty;
@@ -2092,6 +2095,7 @@ void call(redisClient *c, int flags) {
     }
 
     /* Propagate the command into the AOF and replication link */
+	//把这条命令传递给AOF和replication
     if (flags & REDIS_CALL_PROPAGATE) {
         int flags = REDIS_PROPAGATE_NONE;
 
@@ -2131,6 +2135,7 @@ void call(redisClient *c, int flags) {
  * If 1 is returned the client is still alive and valid and
  * other operations can be performed by the caller. Otherwise
  * if 0 is returned the client was destroyed (i.e. after QUIT). */
+/* 如果这个函数被调用了，说明我们已经读取了一整条命令，命令的参数都已经存放在argv/argc里面了*/
 int processCommand(redisClient *c) {
     /* The QUIT command is handled separately. Normal command procs will
      * go through checking for replication and QUIT will cause trouble
@@ -2144,6 +2149,7 @@ int processCommand(redisClient *c) {
 
     /* Now lookup the command and check ASAP about trivial error conditions
      * such as wrong arity, bad command name and so forth. */
+     //检查传来的命令是否合法
     c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);
     if (!c->cmd) {
         flagTransaction(c);
@@ -2159,6 +2165,7 @@ int processCommand(redisClient *c) {
     }
 
     /* Check if the user is authenticated */
+	//检查用户是否授权
     if (server.requirepass && !c->authenticated && c->cmd->proc != authCommand)
     {
         flagTransaction(c);
@@ -2170,6 +2177,7 @@ int processCommand(redisClient *c) {
      * However we don't perform the redirection if:
      * 1) The sender of this command is our master.
      * 2) The command has no key arguments. */
+     //如果开启了cluster，那么执行重定向
     if (server.cluster_enabled &&
         !(c->flags & REDIS_MASTER) &&
         !(c->flags & REDIS_LUA_CLIENT &&
@@ -2198,6 +2206,7 @@ int processCommand(redisClient *c) {
      * First we try to free some memory if possible (if there are volatile
      * keys in the dataset). If there are not the only thing we can do
      * is returning an error. */
+     //尝试释放一些内存空间
     if (server.maxmemory) {
         int retval = freeMemoryIfNeeded();
         if ((c->cmd->flags & REDIS_CMD_DENYOOM) && retval == REDIS_ERR) {
@@ -2209,6 +2218,7 @@ int processCommand(redisClient *c) {
 
     /* Don't accept write commands if there are problems persisting on disk
      * and if this is a master instance. */
+     //如果持久化出现问题并且当前是master节点，那么不接受写命令
     if (((server.stop_writes_on_bgsave_err &&
           server.saveparamslen > 0 &&
           server.lastbgsave_status == REDIS_ERR) ||
@@ -2230,6 +2240,7 @@ int processCommand(redisClient *c) {
 
     /* Don't accept write commands if there are not enough good slaves and
      * user configured the min-slaves-to-write option. */
+     //不接受写命令，如果当前的good slaves的数量小于repl_min_slaves_to_write这个值
     if (server.masterhost == NULL &&
         server.repl_min_slaves_to_write &&
         server.repl_min_slaves_max_lag &&
@@ -2243,6 +2254,7 @@ int processCommand(redisClient *c) {
 
     /* Don't accept write commands if this is a read only slave. But
      * accept write commands if this is our master. */
+     //如果当前结点是reda only slave，则不接受写命令
     if (server.masterhost && server.repl_slave_ro &&
         !(c->flags & REDIS_MASTER) &&
         c->cmd->flags & REDIS_CMD_WRITE)
@@ -2252,6 +2264,7 @@ int processCommand(redisClient *c) {
     }
 
     /* Only allow SUBSCRIBE and UNSUBSCRIBE in the context of Pub/Sub */
+	//检查client状态是否处于PUB/SUB上下文
     if (c->flags & REDIS_PUBSUB &&
         c->cmd->proc != pingCommand &&
         c->cmd->proc != subscribeCommand &&
@@ -2264,6 +2277,7 @@ int processCommand(redisClient *c) {
 
     /* Only allow INFO and SLAVEOF when slave-serve-stale-data is no and
      * we are a slave with a broken link with master. */
+     //如果当前结点是slave，且处于何master断开的状态，那么slave的数据就有可能是过时的，如果repl_serve_stale_data=0，表明，不提供过时的数据服务，就不接受请求的命令，除了INFO和SLAVEOF命令
     if (server.masterhost && server.repl_state != REDIS_REPL_CONNECTED &&
         server.repl_serve_stale_data == 0 &&
         !(c->cmd->flags & REDIS_CMD_STALE))
@@ -2297,10 +2311,13 @@ int processCommand(redisClient *c) {
     }
 
     /* Exec the command */
+	//当上面的一系列检查完毕之后，开始执行命令
+	//如果c->flag是REDIS_MULTI，表明当前client处于事务中
     if (c->flags & REDIS_MULTI &&
         c->cmd->proc != execCommand && c->cmd->proc != discardCommand &&
         c->cmd->proc != multiCommand && c->cmd->proc != watchCommand)
     {
+    	//命令入列
         queueMultiCommand(c);
         addReply(c,shared.queued);
     } else {
