@@ -268,22 +268,22 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_CLIENT_TYPE_PUBSUB 2 /* Clients subscribed to PubSub channels. */
 #define REDIS_CLIENT_TYPE_COUNT 3
 
-/* Slave replication state - from the point of view of the slave. */
-#define REDIS_REPL_NONE 0 /* No active replication */
-#define REDIS_REPL_CONNECT 1 /* Must connect to master */
-#define REDIS_REPL_CONNECTING 2 /* Connecting to master */
-#define REDIS_REPL_RECEIVE_PONG 3 /* Wait for PING reply */
-#define REDIS_REPL_TRANSFER 4 /* Receiving .rdb from master */
-#define REDIS_REPL_CONNECTED 5 /* Connected to master */
+/* Slave replication state - from the point of view of the slave.(从slave自己角度看自己的状态) */
+#define REDIS_REPL_NONE 0 /* No active replication(没有活跃的replication) */
+#define REDIS_REPL_CONNECT 1 /* Must connect to master(必须连接master) */
+#define REDIS_REPL_CONNECTING 2 /* Connecting to master(正在连接master) */
+#define REDIS_REPL_RECEIVE_PONG 3 /* Wait for PING reply(等待PING的回复) */
+#define REDIS_REPL_TRANSFER 4 /* Receiving .rdb from master(正在从master节点接收.rdb文件) */
+#define REDIS_REPL_CONNECTED 5 /* Connected to master(已经连接上了master节点) */
 
-/* Slave replication state - from the point of view of the master.
+/* Slave replication state - from the point of view of the master.(从master端看slave的状态)
  * In SEND_BULK and ONLINE state the slave receives new updates
  * in its output queue. In the WAIT_BGSAVE state instead the server is waiting
  * to start the next background saving in order to send updates to it. */
-#define REDIS_REPL_WAIT_BGSAVE_START 6 /* We need to produce a new RDB file. */
-#define REDIS_REPL_WAIT_BGSAVE_END 7 /* Waiting RDB file creation to finish. */
-#define REDIS_REPL_SEND_BULK 8 /* Sending RDB file to slave. */
-#define REDIS_REPL_ONLINE 9 /* RDB file transmitted, sending just updates. */
+#define REDIS_REPL_WAIT_BGSAVE_START 6 /* We need to produce a new RDB file(等待开始创建一个新的RDB文件). */
+#define REDIS_REPL_WAIT_BGSAVE_END 7 /* Waiting RDB file creation to finish.(等待RDB创建完成) */
+#define REDIS_REPL_SEND_BULK 8 /* Sending RDB file to slave.(正在发送RDB文件给slave) */
+#define REDIS_REPL_ONLINE 9 /* RDB file transmitted, sending just updates.(RDB文件已经发送给slave了，后面仅仅发送新增的改变) */
 
 /* Synchronous read timeout - slave side */
 #define REDIS_REPL_SYNCIO_TIMEOUT 5
