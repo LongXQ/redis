@@ -825,12 +825,12 @@ struct redisServer {
     int slaveseldb;                 /* Last SELECTed DB in replication output */
     long long master_repl_offset;   /* Global replication offset */
     int repl_ping_slave_period;     /* Master pings the slave every N seconds */
-    char *repl_backlog;             /* Replication backlog for partial syncs */
-    long long repl_backlog_size;    /* Backlog circular buffer size */
-    long long repl_backlog_histlen; /* Backlog actual data length */
-    long long repl_backlog_idx;     /* Backlog circular buffer current offset */
+    char *repl_backlog;             /* Replication backlog for partial syncs(部分同步使用的backlog循环缓冲区) */
+    long long repl_backlog_size;    /* Backlog circular buffer size(backlog循环缓冲区的大小) */
+    long long repl_backlog_histlen; /* Backlog actual data length(backlog中数据的真实长度) */
+    long long repl_backlog_idx;     /* Backlog circular buffer current offset(backlog循环缓冲区的当前的偏移位置) */
     long long repl_backlog_off;     /* Replication offset of first byte in the
-                                       backlog buffer. */
+                                       backlog buffer.(backlog缓冲区中第一个可复制字节的偏移位置，这个偏移位置是指总的偏移位置，而不是在backlog中的位置) */
     time_t repl_backlog_time_limit; /* Time without slaves after the backlog
                                        gets released. */
     time_t repl_no_slaves_since;    /* We have no slaves since that time.

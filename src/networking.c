@@ -580,6 +580,8 @@ void addReplyBulkLongLong(redisClient *c, long long ll) {
 /* Copy 'src' client output buffers into 'dst' client output buffers.
  * The function takes care of freeing the old output buffers of the
  * destination client. */
+/* 拷贝src的输出buffer里面的数据给dst的输出buffer
+ */
 void copyClientOutputBuffer(redisClient *dst, redisClient *src) {
     listRelease(dst->reply);
     dst->reply = listDup(src->reply);
