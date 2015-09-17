@@ -670,6 +670,7 @@ static void freeClientArgv(redisClient *c) {
 /* Close all the slaves connections. This is useful in chained replication
  * when we resync with our own master and want to force all our slaves to
  * resync with us as well. */
+ //关闭所有的slave连接，当我们和我们自己的master进行了重新同步，想要强迫我们的slaves进行重新同步的时候很有用
 void disconnectSlaves(void) {
     while (listLength(server.slaves)) {
         listNode *ln = listFirst(server.slaves);
@@ -679,12 +680,13 @@ void disconnectSlaves(void) {
 
 /* This function is called when the slave lose the connection with the
  * master into an unexpected way. */
+ //当slave失去和master的连接时调用这个函数
 void replicationHandleMasterDisconnection(void) {
     server.master = NULL;
     server.repl_state = REDIS_REPL_CONNECT;
     server.repl_down_since = server.unixtime;
     /* We lost connection with our master, force our slaves to resync
-     * with us as well to load the new data set.
+     * with us as well to load the new data set.(我们和master失去了连接，强迫我们的slaves和我们重新同步)
      *
      * If server.masterhost is NULL the user called SLAVEOF NO ONE so
      * slave resync is not needed. */

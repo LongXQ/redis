@@ -236,7 +236,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_MULTI (1<<3)   /* This client is in a MULTI context */
 #define REDIS_BLOCKED (1<<4) /* The client is waiting in a blocking operation */
 #define REDIS_DIRTY_CAS (1<<5) /* Watched keys modified. EXEC will fail. */
-#define REDIS_CLOSE_AFTER_REPLY (1<<6) /* Close after writing entire reply. */
+#define REDIS_CLOSE_AFTER_REPLY (1<<6) /* Close after writing entire reply.(在把reply写到client后，关闭这个client) */
 #define REDIS_UNBLOCKED (1<<7) /* This client was unblocked and is stored in
                                   server.unblocked_clients */
 #define REDIS_LUA_CLIENT (1<<8) /* This is a non connected client used by Lua */
@@ -543,7 +543,7 @@ typedef struct redisClient {
     off_t repldboff;        /* replication DB file offset */
     off_t repldbsize;       /* replication DB file size */
     sds replpreamble;       /* replication DB preamble. */
-    long long reploff;      /* replication offset if this is our master */
+    long long reploff;      /* replication offset if this is our master(如果当前redisclient代表master) */
     long long repl_ack_off; /* replication ack offset, if this is a slave */
     long long repl_ack_time;/* replication ack time, if this is a slave */
     char replrunid[REDIS_RUN_ID_SIZE+1]; /* master run id if this is a master */
@@ -821,7 +821,7 @@ struct redisServer {
     int syslog_enabled;             /* Is syslog enabled? */
     char *syslog_ident;             /* Syslog ident */
     int syslog_facility;            /* Syslog facility */
-    /* Replication (master) */
+    /* Replication (master)(如果当前结点是master的话，会用到下面这些属性) */
     int slaveseldb;                 /* Last SELECTed DB in replication output */
     long long master_repl_offset;   /* Global replication offset */
     int repl_ping_slave_period;     /* Master pings the slave every N seconds */
@@ -841,14 +841,14 @@ struct redisServer {
     int repl_diskless_sync;         /* Send RDB to slaves sockets directly. */
     int repl_diskless_sync_delay;   /* Delay to start a diskless repl BGSAVE. */
 	
-    /* Replication (slave) */
+    /* Replication (slave)(如果当前结点是slave的话会用到下面这些属性) */
 	/* 有关复制功能(从服务器)的属性*/
     char *masterauth;               /* AUTH with this password with master */
     char *masterhost;               /* Hostname of master */
     int masterport;                 /* Port of master */
     int repl_timeout;               /* Timeout after N seconds of master idle */
-    redisClient *master;     /* Client that is master for this slave */
-    redisClient *cached_master; /* Cached master to be reused for PSYNC. */
+    redisClient *master;     /* Client that is master for this slave(代表slave的master) */
+    redisClient *cached_master; /* Cached master to be reused for PSYNC.(被缓存的master，被PSYNC使用) */
     int repl_syncio_timeout; /* Timeout for synchronous I/O calls */
     int repl_state;          /* Replication status if the instance is a slave */
     off_t repl_transfer_size; /* Size of RDB to read from master during sync. */
@@ -860,7 +860,7 @@ struct redisServer {
     time_t repl_transfer_lastio; /* Unix time of the latest read, for timeout */
     int repl_serve_stale_data; /* Serve stale data when link is down?(当link处于断开的状态时，是否服务过时的数据) */
     int repl_slave_ro;          /* Slave is read only? */
-    time_t repl_down_since; /* Unix time at which link with master went down */
+    time_t repl_down_since; /* Unix time at which link with master went down(和master断开连接的时间) */
     int repl_disable_tcp_nodelay;   /* Disable TCP_NODELAY after SYNC? */
     int slave_priority;             /* Reported in INFO and used by Sentinel. */
     char repl_master_runid[REDIS_RUN_ID_SIZE+1];  /* Master run id for PSYNC. */
