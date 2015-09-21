@@ -97,6 +97,7 @@ int getTimeoutFromObjectOrReply(redisClient *c, robj *object, mstime_t *timeout,
 /* Block a client for the specific operation type. Once the REDIS_BLOCKED
  * flag is set client query buffer is not longer processed, but accumulated,
  * and will be processed when the client is unblocked. */
+//阻塞client，并且设置阻塞类型为btype
 void blockClient(redisClient *c, int btype) {
     c->flags |= REDIS_BLOCKED;
     c->btype = btype;

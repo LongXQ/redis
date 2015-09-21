@@ -244,10 +244,10 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_CLOSE_ASAP (1<<10)/* Close this client ASAP */
 #define REDIS_UNIX_SOCKET (1<<11) /* Client connected via Unix domain socket */
 #define REDIS_DIRTY_EXEC (1<<12)  /* EXEC will fail for errors while queueing */
-#define REDIS_MASTER_FORCE_REPLY (1<<13)  /* Queue replies even if is master */
+#define REDIS_MASTER_FORCE_REPLY (1<<13)  /* Queue replies even if is master(强迫master节点接收回复消息) */
 #define REDIS_FORCE_AOF (1<<14)   /* Force AOF propagation of current cmd. */
 #define REDIS_FORCE_REPL (1<<15)  /* Force replication of current cmd. */
-#define REDIS_PRE_PSYNC (1<<16)   /* Instance don't understand PSYNC. */
+#define REDIS_PRE_PSYNC (1<<16)   /* Instance don't understand PSYNC.(表明当前的实例不支持PSYNC) */
 #define REDIS_READONLY (1<<17)    /* Cluster client is in read-only state. */
 #define REDIS_PUBSUB (1<<18)      /* Client is in Pub/Sub mode. */
 
@@ -544,14 +544,14 @@ typedef struct redisClient {
     off_t repldbsize;       /* replication DB file size */
     sds replpreamble;       /* replication DB preamble. */
     long long reploff;      /* replication offset if this is our master(如果当前redisclient代表master) */
-    long long repl_ack_off; /* replication ack offset, if this is a slave */
-    long long repl_ack_time;/* replication ack time, if this is a slave */
+    long long repl_ack_off; /* replication ack offset, if this is a slave(slave回复的复制偏移量) */
+    long long repl_ack_time;/* replication ack time, if this is a slave(slave回复的时间) */
     char replrunid[REDIS_RUN_ID_SIZE+1]; /* master run id if this is a master */
     int slave_listening_port; /* As configured with: SLAVECONF listening-port */
     multiState mstate;      /* MULTI/EXEC state */
     int btype;              /* Type of blocking op if REDIS_BLOCKED. */
     blockingState bpop;     /* blocking state */
-    long long woff;         /* Last write global replication offset. */
+    long long woff;         /* Last write global replication offset.(记录了最后一次写命令的全局复制偏移量) */
     list *watched_keys;     /* Keys WATCHED for MULTI/EXEC CAS */
     dict *pubsub_channels;  /* channels a client is interested in (SUBSCRIBE) */
     list *pubsub_patterns;  /* patterns a client is interested in (SUBSCRIBE) */
@@ -667,7 +667,7 @@ struct redisServer {
     char *requirepass;          /* Pass for AUTH command, or NULL */
     char *pidfile;              /* PID file path */
     int arch_bits;              /* 32 or 64 depending on sizeof(long) */
-    int cronloops;              /* Number of times the cron function run */
+    int cronloops;              /* Number of times the cron function run(serverCron这个函数运行了多少次的计数) */
     char runid[REDIS_RUN_ID_SIZE+1];  /* ID always different at every exec. */
     int sentinel_mode;          /* True if this instance is a Sentinel. */
 	
@@ -824,7 +824,7 @@ struct redisServer {
     /* Replication (master)(如果当前结点是master的话，会用到下面这些属性) */
     int slaveseldb;                 /* Last SELECTed DB in replication output */
     long long master_repl_offset;   /* Global replication offset */
-    int repl_ping_slave_period;     /* Master pings the slave every N seconds */
+    int repl_ping_slave_period;     /* Master pings the slave every N seconds(master节点每N秒PINGslave一下) */
     char *repl_backlog;             /* Replication backlog for partial syncs(部分同步使用的backlog循环缓冲区) */
     long long repl_backlog_size;    /* Backlog circular buffer size(backlog循环缓冲区的大小) */
     long long repl_backlog_histlen; /* Backlog actual data length(backlog中数据的真实长度) */
@@ -870,7 +870,7 @@ struct redisServer {
     list *repl_scriptcache_fifo;        /* First in, first out LRU eviction. */
     unsigned int repl_scriptcache_size; /* Max number of elements. */
     /* Synchronous replication. */
-    list *clients_waiting_acks;         /* Clients waiting in WAIT command. */
+    list *clients_waiting_acks;         /* Clients waiting in WAIT command.(阻塞在WAIT命令的client链表) */
     int get_ack_from_slaves;            /* If true we send REPLCONF GETACK. */
 	
     /* Limits */

@@ -1914,46 +1914,51 @@ int replicationScriptCacheExists(sds sha1) {
  * - Master increment the offset every time new commands are sent to slaves.
  * - Slaves ping back masters with the offset processed so far.
  * - Redis master有一个全局的复制偏移量，被PSYNC使用
- * - Master每次有一个新的命令
+ * - Master每次有一个新的命令发送给了slaves，就会对复制偏移量加一
+ * - Slaves回复master目前为止被处理过的偏移量
  *
  * So synchronous replication adds a new WAIT command in the form:
  *
  *   WAIT <num_replicas> <milliseconds_timeout>
  *
- * That returns the number of replicas that processed the query when
+ * That returns the number of replicas(复制) that processed the query when
  * we finally have at least num_replicas, or when the timeout was
- * reached.
+ * reached.(这个命令返回我们最终处理查询的复制的数量，最终至少num_replicas或者时间超时)
  *
  * The command is implemented in this way:
  *
  * - Every time a client processes a command, we remember the replication
- *   offset after sending that command to the slaves.
+ *   offset after sending that command to the slaves.(每次一个client处理了一条命令，我们记住这个
+ *   复制偏移量在发送这个命令给slaves之后)
  * - When WAIT is called, we ask slaves to send an acknowledgement ASAP.
- *   The client is blocked at the same time (see blocked.c).
+ *   The client is blocked at the same time (see blocked.c).(当WAIT被调用之后，我们要求slaves尽可能快的发
+ *   送一个ack，于此同时cient被阻塞)
  * - Once we receive enough ACKs for a given offset or when the timeout
  *   is reached, the WAIT command is unblocked and the reply sent to the
- *   client.
+ *   client.(一旦对于给定的偏移量我们收到足够的ACKs或者时间超时，WAIT命令解除阻塞，发送回复给client)
  */
 
 /* This just set a flag so that we broadcast a REPLCONF GETACK command
  * to all the slaves in the beforeSleep() function. Note that this way
  * we "group" all the clients that want to wait for synchronouns replication
  * in a given event loop iteration, and send a single GETACK for them all. */
+ //设置一个标志以便我们能广播一个REOLCONF GETACK命令给所有的slaves在beforeSleep函数调用之前。
 void replicationRequestAckFromSlaves(void) {
     server.get_ack_from_slaves = 1;
 }
 
 /* Return the number of slaves that already acknowledged the specified
  * replication offset. */
+//返回早已经回复了特定复制偏移量的slave的数量，
 int replicationCountAcksByOffset(long long offset) {
     listIter li;
     listNode *ln;
     int count = 0;
-
+	//遍历每一个slave
     listRewind(server.slaves,&li);
     while((ln = listNext(&li))) {
         redisClient *slave = ln->value;
-
+		//如果replstate!=REDIS_REPL_ONLINE那说明至少.rdb文件还没传输完成，而ack是关于和命令相关的偏移量
         if (slave->replstate != REDIS_REPL_ONLINE) continue;
         if (slave->repl_ack_off >= offset) count++;
     }
@@ -1962,6 +1967,7 @@ int replicationCountAcksByOffset(long long offset) {
 
 /* WAIT for N replicas to acknowledge the processing of our latest
  * write command (and all the previous commands). */
+//WAIT N个复制量的确认回复
 void waitCommand(redisClient *c) {
     mstime_t timeout;
     long numreplicas, ackreplicas;
@@ -1990,6 +1996,7 @@ void waitCommand(redisClient *c) {
 
     /* Make sure that the server will send an ACK request to all the slaves
      * before returning to the event loop. */
+    //确保进入事件循环前server能够发送一个ACK请求给所有的slaves，这样slave接到这个请求后就会发送带有偏移量的回复给server
     replicationRequestAckFromSlaves();
 }
 
@@ -1997,6 +2004,7 @@ void waitCommand(redisClient *c) {
  * specific cleanup. We just remove the client from the list of clients
  * waiting for replica acks. Never call it directly, call unblockClient()
  * instead. */
+//把client c从阻塞链表中移除
 void unblockClientWaitingReplicas(redisClient *c) {
     listNode *ln = listSearchKey(server.clients_waiting_acks,c);
     redisAssert(ln != NULL);
@@ -2005,13 +2013,14 @@ void unblockClientWaitingReplicas(redisClient *c) {
 
 /* Check if there are clients blocked in WAIT that can be unblocked since
  * we received enough ACKs from slaves. */
+//检测我们是否有client阻塞在WAIT命令上，如果有并且我们收到了足够多的ACKs从slaves，那么把client变为非阻塞
 void processClientsWaitingReplicas(void) {
     long long last_offset = 0;
     int last_numreplicas = 0;
 
     listIter li;
     listNode *ln;
-
+	//遍历阻塞链表
     listRewind(server.clients_waiting_acks,&li);
     while((ln = listNext(&li))) {
         redisClient *c = ln->value;
@@ -2040,6 +2049,7 @@ void processClientsWaitingReplicas(void) {
 
 /* Return the slave replication offset for this instance, that is
  * the offset for which we already processed the master replication stream. */
+//返回slave的复制偏移量，这个偏移量是我们早已经处理的master复制流中的偏移量
 long long replicationGetSlaveOffset(void) {
     long long offset = 0;
 
@@ -2062,8 +2072,12 @@ long long replicationGetSlaveOffset(void) {
 
 /* Replication cron function, called 1 time per second. */
 //replication cron函数，每一秒钟调用一次
+//这个函数用来重连master节点和检测传输故障
 void replicationCron(void) {
+	//如果server.masterhost存在表明目前节点是slave节点
+
     /* Non blocking connection timeout? */
+	//检测是否超时连接了
     if (server.masterhost &&
         (server.repl_state == REDIS_REPL_CONNECTING ||
          server.repl_state == REDIS_REPL_RECEIVE_PONG) &&
@@ -2074,6 +2088,7 @@ void replicationCron(void) {
     }
 
     /* Bulk transfer I/O timeout? */
+	//检测数据传输中是否超时了
     if (server.masterhost && server.repl_state == REDIS_REPL_TRANSFER &&
         (time(NULL)-server.repl_transfer_lastio) > server.repl_timeout)
     {
@@ -2082,6 +2097,7 @@ void replicationCron(void) {
     }
 
     /* Timed out master when we are an already connected slave? */
+	//当前结点是一个早连上了master的slave节点，检测是不是很久没和master进行活动了
     if (server.masterhost && server.repl_state == REDIS_REPL_CONNECTED &&
         (time(NULL)-server.master->lastinteraction) > server.repl_timeout)
     {
@@ -2090,6 +2106,7 @@ void replicationCron(void) {
     }
 
     /* Check if we should connect to a MASTER */
+	//检测我们是否应该连接一个master
     if (server.repl_state == REDIS_REPL_CONNECT) {
         redisLog(REDIS_NOTICE,"Connecting to MASTER %s:%d",
             server.masterhost, server.masterport);
@@ -2098,9 +2115,10 @@ void replicationCron(void) {
         }
     }
 
-    /* Send ACK to master from time to time.
-     * Note that we do not send periodic acks to masters that don't
+    /* Send ACK to master from time to time(不时，有时，偶尔).
+     * Note that we do not send periodic(周期性的，周期的) acks to masters that don't
      * support PSYNC and replication offsets. */
+     //如果不支持PSYNC，我们调用replicationSendAck发送ACK给master
     if (server.masterhost && server.master &&
         !(server.master->flags & REDIS_PRE_PSYNC))
         replicationSendAck();
@@ -2109,13 +2127,18 @@ void replicationCron(void) {
      * So slaves can implement an explicit timeout to masters, and will
      * be able to detect a link disconnection even if the TCP connection
      * will not actually go down. */
+    /* 如果当前结点有关联的slaves，那么时不时的PING他们。
+     * server.repl_ping_slave_period * server.hz表示的是每serverCron这个函数运行了这么多次就PING一下slaves
+     */
     if (!(server.cronloops % (server.repl_ping_slave_period * server.hz))) {
         listIter li;
         listNode *ln;
         robj *ping_argv[1];
 
         /* First, send PING */
+		//首先，发送PING命令
         ping_argv[0] = createStringObject("PING",4);
+		//发送给slaves
         replicationFeedSlaves(server.slaves, server.slaveseldb, ping_argv, 1);
         decrRefCount(ping_argv[0]);
 
@@ -2123,7 +2146,10 @@ void replicationCron(void) {
          * stage, that is, slaves waiting for the master to create the RDB file.
          * The newline will be ignored by the slave but will refresh the
          * last-io timer preventing a timeout. */
+        //然后发送一个换行符给所有的处于预同步阶段的slaves，在这个阶段的slaves正在等待在创建RDB文件的master节点
+        //这个换行符会被slave忽略，但是会刷新last-io的值，阻止slave超时
         listRewind(server.slaves,&li);
+		//遍历每一个slave
         while((ln = listNext(&li))) {
             redisClient *slave = ln->value;
 
@@ -2139,6 +2165,7 @@ void replicationCron(void) {
     }
 
     /* Disconnect timedout slaves. */
+	//断开超时的slaves
     if (listLength(server.slaves)) {
         listIter li;
         listNode *ln;
@@ -2148,6 +2175,7 @@ void replicationCron(void) {
             redisClient *slave = ln->value;
 
             if (slave->replstate != REDIS_REPL_ONLINE) continue;
+			//如果当前slave不支持PSYNC，则跳过(因为断开这种slave没有实际意义)
             if (slave->flags & REDIS_PRE_PSYNC) continue;
             if ((server.unixtime - slave->repl_ack_time) > server.repl_timeout)
             {
@@ -2160,11 +2188,14 @@ void replicationCron(void) {
 
     /* If we have no attached slaves and there is a replication backlog
      * using memory, free it after some (configured) time. */
+    /* 如果我们没有关联的slaves，但是有一个replication backlog，则在一些事件后释放这个backlog
+     */
     if (listLength(server.slaves) == 0 && server.repl_backlog_time_limit &&
         server.repl_backlog)
     {
         time_t idle = server.unixtime - server.repl_no_slaves_since;
 
+		//如果没有slaves的时间超出了设置的时间，则释放这个backlog
         if (idle > server.repl_backlog_time_limit) {
             freeReplicationBacklog();
             redisLog(REDIS_NOTICE,
@@ -2191,12 +2222,20 @@ void replicationCron(void) {
      * This code is also useful to trigger a BGSAVE if the diskless
      * replication was turned off with CONFIG SET, while there were already
      * slaves in WAIT_BGSAVE_START state. */
+    /* 如果我们正在使用diskless replication，并且这里有slaves正在以WAIT_BGSAVE_START等待，
+     * 检查是否已经等待了足够的时间，然后开启一个BGSAVE
+     *
+     * 这段代码对于触发一个BGSAVE很有帮助，如果diskless replication被CONFIG_SET关闭了，于此同时还有slave早就
+     * 处于WAIT_BGSAVE_START状态了
+     */
+     //rdb_child_pid==-1和aof_child_pid==-1说明此时没有子进程在进行BGSAVE操作
     if (server.rdb_child_pid == -1 && server.aof_child_pid == -1) {
         time_t idle, max_idle = 0;
         int slaves_waiting = 0;
         listNode *ln;
         listIter li;
-
+		
+		//遍历每一个slave
         listRewind(server.slaves,&li);
         while((ln = listNext(&li))) {
             redisClient *slave = ln->value;
