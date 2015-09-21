@@ -95,6 +95,7 @@ typedef struct _rio rio;
  
 /* rio写函数，背后调用的是rio::write的实现
  * 把buf中的内容写到rio表示的流中去 */
+//写失败返回0，成功返回1
 static inline size_t rioWrite(rio *r, const void *buf, size_t len) {
     while (len) {
 		//bytes_to_write表示一次写的最大字节数

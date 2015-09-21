@@ -701,23 +701,31 @@ werr:
     return REDIS_ERR;
 }
 
-/* This is just a wrapper to rdbSaveRio() that additionally adds a prefix
- * and a suffix to the generated RDB dump. The prefix is:
+/* This is just a wrapper to rdbSaveRio() that additionally adds a prefix(前缀)
+ * and a suffix(后缀) to the generated RDB dump. The prefix is:
  *
  * $EOF:<40 bytes unguessable hex string>\r\n
  *
  * While the suffix is the 40 bytes hex string we announced in the prefix.
  * This way processes receiving the payload can understand when it ends
  * without doing any processing of the content. */
+/* 在生成的RDB转储文件中添加前缀和后缀
+ * 前缀的格式是:$EOF:<40 bytes unguessable hex string>\r\n
+ * 后缀的格式是:<40 bytes unguessable hex string>
+ * 通过这种方式，接收RDB文件的进程能够明白什么时候RDB文件接受而不用处理任何文件的内容
+ */
 int rdbSaveRioWithEOFMark(rio *rdb, int *error) {
     char eofmark[REDIS_EOF_MARK_SIZE];
 
     getRandomHexChars(eofmark,REDIS_EOF_MARK_SIZE);
     if (error) *error = 0;
+	//前三个rioWrite用来写入前缀到rio关联的流中去
     if (rioWrite(rdb,"$EOF:",5) == 0) goto werr;
     if (rioWrite(rdb,eofmark,REDIS_EOF_MARK_SIZE) == 0) goto werr;
     if (rioWrite(rdb,"\r\n",2) == 0) goto werr;
+	//rio写入RDB到关联的流中去
     if (rdbSaveRio(rdb,error) == REDIS_ERR) goto werr;
+	//写入后缀
     if (rioWrite(rdb,eofmark,REDIS_EOF_MARK_SIZE) == 0) goto werr;
     return REDIS_OK;
 
@@ -1452,10 +1460,12 @@ int rdbSaveToSlavesSockets(void) {
             fds[numfds++] = slave->fd;
 			//修改状态
             slave->replstate = REDIS_REPL_WAIT_BGSAVE_END;
-            /* Put the socket in non-blocking mode to simplify RDB transfer.
+            /* Put the socket in non-blocking mode to simplify(简化) RDB transfer.
              * We'll restore it when the children returns (since duped socket
              * will share the O_NONBLOCK attribute with the parent). */
+             //为了简化RDB的传输，设置slave->fd为阻塞的
             anetBlock(NULL,slave->fd);
+			//设置socket发送超时时间
             anetSendTimeout(NULL,slave->fd,server.repl_timeout*1000);
         }
     }
@@ -1467,7 +1477,7 @@ int rdbSaveToSlavesSockets(void) {
         /* Child */
         int retval;
         rio slave_sockets;
-
+		//创建一个基于fdset的rio对象
         rioInitWithFdset(&slave_sockets,fds,numfds);
         zfree(fds);
 
@@ -1502,6 +1512,7 @@ int rdbSaveToSlavesSockets(void) {
              * can match the report with a specific slave, and 'error' is
              * set to 0 if the replication process terminated with a success
              * or the error code if an error occurred. */
+             //构造发送给父进程的消息格式
             void *msg = zmalloc(sizeof(uint64_t)*(1+2*numfds));
             uint64_t *len = msg;
             uint64_t *ids = len+1;
@@ -1517,7 +1528,12 @@ int rdbSaveToSlavesSockets(void) {
              * we are unable to transfer the message to the parent, we exit
              * with an error so that the parent will abort the replication
              * process with all the childre that were waiting. */
+            /* 发送消息给父进程。如果我们没有一个正常的slaves或者我们不能够发送数据给父进程，
+             * 那么我们以一个错误退出以便父进程能够停止复制进程
+             */
+            
             msglen = sizeof(uint64_t)*(1+2*numfds);
+			//*len==0表明我们没有一个正常的slave
             if (*len == 0 ||
                 write(server.rdb_pipe_write_result_to_parent,msg,msglen)
                 != msglen)

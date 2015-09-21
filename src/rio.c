@@ -177,7 +177,7 @@ void rioInitWithFile(rio *r, FILE *fp) {
  * if there is some pending buffer, so this function is also used in order
  * to implement rioFdsetFlush(). */
  //rio中的RDB是基于fd set的。
- //rioFdsetWrite函数只要成功的写入了一个fd就能返回成功
+ //rioFdsetWrite函数只要成功把数据写入到一个fd中就能返回成功
 static size_t rioFdsetWrite(rio *r, const void *buf, size_t len) {
     ssize_t retval;
     int j;
@@ -265,6 +265,7 @@ static off_t rioFdsetTell(rio *r) {
 static int rioFdsetFlush(rio *r) {
     /* Our flush is implemented by the write method, that recognizes a
      * buffer set to NULL with a count of zero as a flush request. */
+     //如果后面的两个参数分别为NULL和0表明进行flush操作
     return rioFdsetWrite(r,NULL,0);
 }
 
