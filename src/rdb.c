@@ -1409,6 +1409,7 @@ void backgroundSaveDoneHandler(int exitcode, int bysignal) {
 
 /* Spawn an RDB child that writes the RDB to the sockets of the slaves
  * that are currently in REDIS_REPL_WAIT_BGSAVE_START state. */
+//产生一个子进程，把RDB直接写到socket中复制给处REDIS_REPL_WAIT_BGSAVE_START状态的slaves(diskless)
 int rdbSaveToSlavesSockets(void) {
     int *fds;
     uint64_t *clientids;
@@ -1418,32 +1419,38 @@ int rdbSaveToSlavesSockets(void) {
     pid_t childpid;
     long long start;
     int pipefds[2];
-
+	
+	//检测目前是否已经有相应的子进程在工作了
     if (server.rdb_child_pid != -1) return REDIS_ERR;
 
     /* Before to fork, create a pipe that will be used in order to
      * send back to the parent the IDs of the slaves that successfully
      * received all the writes. */
+    //创建一个管道，用来发送已经成功正确收到所有的writes的slaves的ID通知给父进程
     if (pipe(pipefds) == -1) return REDIS_ERR;
     server.rdb_pipe_read_result_from_child = pipefds[0];
     server.rdb_pipe_write_result_to_parent = pipefds[1];
 
     /* Collect the file descriptors of the slaves we want to transfer
-     * the RDB to, which are i WAIT_BGSAVE_START state. */
+     * the RDB to, which are in WAIT_BGSAVE_START state. */
+    //收集我们想发送RDB给slaves的fd并且处于WAIT_BGSAVE_START状态
     fds = zmalloc(sizeof(int)*listLength(server.slaves));
     /* We also allocate an array of corresponding client IDs. This will
      * be useful for the child process in order to build the report
      * (sent via unix pipe) that will be sent to the parent. */
+    //slaves对应的clients的ID
     clientids = zmalloc(sizeof(uint64_t)*listLength(server.slaves));
     numfds = 0;
-
+	//遍历每一个slave
     listRewind(server.slaves,&li);
     while((ln = listNext(&li))) {
         redisClient *slave = ln->value;
 
         if (slave->replstate == REDIS_REPL_WAIT_BGSAVE_START) {
+			//填充fds数组和clientids数组
             clientids[numfds] = slave->id;
             fds[numfds++] = slave->fd;
+			//修改状态
             slave->replstate = REDIS_REPL_WAIT_BGSAVE_END;
             /* Put the socket in non-blocking mode to simplify RDB transfer.
              * We'll restore it when the children returns (since duped socket
@@ -1455,6 +1462,7 @@ int rdbSaveToSlavesSockets(void) {
 
     /* Create the child process. */
     start = ustime();
+	//创建子进程
     if ((childpid = fork()) == 0) {
         /* Child */
         int retval;
@@ -1526,6 +1534,7 @@ int rdbSaveToSlavesSockets(void) {
         server.stat_fork_time = ustime()-start;
         server.stat_fork_rate = (double) zmalloc_used_memory() * 1000000 / server.stat_fork_time / (1024*1024*1024); /* GB per second. */
         latencyAddSampleIfNeeded("fork",server.stat_fork_time/1000);
+		//如果childpid==-1说明创建子进程失败
         if (childpid == -1) {
             redisLog(REDIS_WARNING,"Can't save in background: fork: %s",
                 strerror(errno));

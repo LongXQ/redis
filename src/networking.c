@@ -100,7 +100,7 @@ redisClient *createClient(int fd) {
     c->bulklen = -1;
     c->sentlen = 0;
     c->flags = 0;
-    c->ctime = c->lastinteraction = server.unixtime;
+    c->ctime = c->lastinteraction = server.unixtime; /* ctime为client创建的时间 */
     c->authenticated = 0;
     c->replstate = REDIS_REPL_NONE;
     c->repl_put_online_on_ack = 0;
@@ -897,7 +897,17 @@ void sendReplyToClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         /* For clients representing masters we don't count sending data
          * as an interaction, since we always send REPLCONF ACK commands
          * that take some time to just fill the socket output buffer.
-         * We just rely on data / pings received for timeout detection. */
+         * We just rely on(答复) data / pings received for timeout detection. */
+        /* 对于代表master的client，我们不把发送数据给该client作为一次交互，
+         * 因为我们总是发送REPLCONF ACK命令给master，这个命令花费一些时间仅仅为了填充socket输出缓冲区。
+         * 我们仅答复收到的数据/pings为了超时检测目的。
+         * 
+         * 按照我的理解，上面的意思是，如果该client代表master，那么发送给该client的数据都是一些REPLCONF ACK
+         * 这种命令会花费一些时间，仅仅为了填充socket输出缓冲区。而我们希望把发送一些答复接收到的数据和pings作为一次有效的和client的交互，
+         * 这样对于超时检测来说更有实际意义，因为我们希望这个超时指的的是有很久没有进行有意义的数据之间的交互了
+         */
+         
+		//如果不是master，则更新lastinteraction
         if (!(c->flags & REDIS_MASTER)) c->lastinteraction = server.unixtime;
     }
     if (c->bufpos == 0 && listLength(c->reply) == 0) {

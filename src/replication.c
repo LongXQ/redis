@@ -2235,7 +2235,7 @@ void replicationCron(void) {
         listNode *ln;
         listIter li;
 		
-		//遍历每一个slave
+		//遍历每一个slave，取得最大空闲时间max_idle
         listRewind(server.slaves,&li);
         while((ln = listNext(&li))) {
             redisClient *slave = ln->value;
@@ -2249,6 +2249,7 @@ void replicationCron(void) {
         if (slaves_waiting && max_idle > server.repl_diskless_sync_delay) {
             /* Start a BGSAVE. Usually with socket target, or with disk target
              * if there was a recent socket -> disk config change. */
+            //开启一个BGSAVE操作
             if (startBgsaveForReplication() == REDIS_OK) {
                 /* It started! We need to change the state of slaves
                  * from WAIT_BGSAVE_START to WAIT_BGSAVE_END in case

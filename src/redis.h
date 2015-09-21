@@ -533,7 +533,7 @@ typedef struct redisClient {
     int sentlen;            /* Amount of bytes already sent in the current
                                buffer or object being sent. */
     time_t ctime;           /* Client creation time */
-    time_t lastinteraction; /* time of the last interaction, used for timeout */
+    time_t lastinteraction; /* time of the last interaction(最后一次该client和server进行交互的时间), used for timeout */
     time_t obuf_soft_limit_reached_time;
     int flags;              /* REDIS_SLAVE | REDIS_MONITOR | REDIS_MULTI ... */
     int authenticated;      /* when requirepass is non-NULL */
@@ -839,7 +839,7 @@ struct redisServer {
     int repl_min_slaves_max_lag;    /* Max lag of <count> slaves to write. */
     int repl_good_slaves_count;     /* Number of slaves with lag <= max_lag.(记录着目前状况良好的slaves的数量) */
     int repl_diskless_sync;         /* Send RDB to slaves sockets directly. */
-    int repl_diskless_sync_delay;   /* Delay to start a diskless repl BGSAVE. */
+    int repl_diskless_sync_delay;   /* Delay to start a diskless repl BGSAVE.(推迟开始一个diskless repl BGSAVE操作的时间) */
 	
     /* Replication (slave)(如果当前结点是slave的话会用到下面这些属性) */
 	/* 有关复制功能(从服务器)的属性*/
@@ -857,7 +857,7 @@ struct redisServer {
     int repl_transfer_s;     /* Slave -> Master SYNC socket */
     int repl_transfer_fd;    /* Slave -> Master SYNC temp file descriptor */
     char *repl_transfer_tmpfile; /* Slave-> master SYNC temp file name */
-    time_t repl_transfer_lastio; /* Unix time of the latest read, for timeout */
+    time_t repl_transfer_lastio; /* Unix time of the latest read(该server最近一次读的时间), for timeout */
     int repl_serve_stale_data; /* Serve stale data when link is down?(当link处于断开的状态时，是否服务过时的数据) */
     int repl_slave_ro;          /* Slave is read only? */
     time_t repl_down_since; /* Unix time at which link with master went down(和master断开连接的时间) */
