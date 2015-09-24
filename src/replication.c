@@ -424,6 +424,11 @@ int masterTryPartialResynchronization(redisClient *c) {
      * 1) Set client state to make it a slave.
      * 2) Inform the client we can continue with +CONTINUE
      * 3) Send the backlog data (from the offset to the end) to the slave. */
+    /* 如果到达这里，则说明我们能够执行一次部分同步操作:
+     * 1)设置client为slave
+     * 2)以+CONTINUE通知client
+     * 3)发送backlog数据给slave
+     */
     c->flags |= REDIS_SLAVE;
     c->replstate = REDIS_REPL_ONLINE;
     c->repl_ack_time = server.unixtime;
@@ -492,9 +497,10 @@ int startBgsaveForReplication(void) {
 }
 
 /* SYNC and PSYNC command implemenation. */
-//SYNC和PSYNC命令都会调用这个函数
+//SYNC和PSYNC命令都会调用这个函数，这个函数被master调用
 void syncCommand(redisClient *c) {
     /* ignore SYNC if already slave or in monitor mode */
+	//如果早已经是REDIS_SLAVE了说明同步早已经发生了
     if (c->flags & REDIS_SLAVE) return;
 
     /* Refuse SYNC requests if we are a slave but the link with our master
@@ -636,9 +642,18 @@ void syncCommand(redisClient *c) {
  * In the future the same command can be used in order to configure
  * the replication to initiate an incremental replication instead of a
  * full resync. */
+/* REPLCONF命令的格式:
+ *		REPLCONF <option> <value> <option> <value> ...
+ *	这个命令被slave使用，用来配置复制过程在开始SYNC命令前
+ *
+ * 现在这个命令的唯一使用用途是和master节点进行通信，告诉master节点slave节点的监听端口，以便master能够
+ * 精确地列出slaves和他们的监听端口在INFO输出中
+ *
+ * 在以后，这个命令能被用来初始化一个增量的复制来替代一个完全复制
+ */
 void replconfCommand(redisClient *c) {
     int j;
-
+	//argc必定是2的整数倍
     if ((c->argc % 2) == 0) {
         /* Number of arguments must be odd to make sure that every
          * option has a corresponding value. */
@@ -647,7 +662,9 @@ void replconfCommand(redisClient *c) {
     }
 
     /* Process every option-value pair. */
+	//处理每一个<option> <value>对
     for (j = 1; j < c->argc; j+=2) {
+		//检测<option>是否是listening-port
         if (!strcasecmp(c->argv[j]->ptr,"listening-port")) {
             long port;
 
@@ -655,10 +672,14 @@ void replconfCommand(redisClient *c) {
                     &port,NULL) != REDIS_OK))
                 return;
             c->slave_listening_port = port;
-        } else if (!strcasecmp(c->argv[j]->ptr,"ack")) {
+        } else if (!strcasecmp(c->argv[j]->ptr,"ack")) {	/* 如果<option>是ack */
             /* REPLCONF ACK is used by slave to inform the master the amount
              * of replication stream that it processed so far. It is an
              * internal only command that normal clients should never use. */
+             
+            /* REPLCONF ACK用来告诉master，slave目前已经处理的复制流的总数目，
+             * 这个是一个内部命令，普通的clients应该从不使用
+             */
             long long offset;
 
             if (!(c->flags & REDIS_SLAVE)) return;
@@ -670,6 +691,7 @@ void replconfCommand(redisClient *c) {
             /* If this was a diskless replication, we need to really put
              * the slave online when the first ACK is received (which
              * confirms slave is online and ready to get more data). */
+             //如果下面两个条件成立，说明是diskless replication
             if (c->repl_put_online_on_ack && c->replstate == REDIS_REPL_ONLINE)
                 putSlaveOnline(c);
             /* Note: this command does not reply anything! */
@@ -677,6 +699,7 @@ void replconfCommand(redisClient *c) {
         } else if (!strcasecmp(c->argv[j]->ptr,"getack")) {
             /* REPLCONF GETACK is used in order to request an ACK ASAP
              * to the slave. */
+            //当前结点是slave才会执行这里，表明master节点发送了REPLCONF GETACK命令给当前slave节点，请求一个ACK
             if (server.masterhost && server.master) replicationSendAck();
             /* Note: this command does not reply anything! */
         } else {
@@ -701,7 +724,7 @@ void replconfCommand(redisClient *c) {
  *    command disables it, so that we can accumulate output buffer without
  *    sending it to the slave.
  * 3) Update the count of good slaves. */
-/* 这个函数设置一个slave成online的状态，在一个slave接收到了RDB文件作为初始化同步之后应该被调用
+/* 这个函数设置一个slave成REDIS_REPL_ONLINE的状态，在一个slave接收到了RDB文件作为初始化同步之后应该被调用
  * 我们最终准备发送增加的命令给slave*/
 void putSlaveOnline(redisClient *slave) {
 	//REDIS_REPL_ONLINE表示slave节点和master节点之间的.rdb文件已经传输完了，接下来只需要传输变动的部分就可以了

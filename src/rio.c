@@ -187,14 +187,16 @@ static size_t rioFdsetWrite(rio *r, const void *buf, size_t len) {
 
     /* To start we always append to our buffer. If it gets larger than
      * a given size, we actually write to the sockets. */
+     //如果len不为0，则把传进来的数据追加到r->io.fdset.buf里面去
     if (len) {
         r->io.fdset.buf = sdscatlen(r->io.fdset.buf,buf,len);
-        len = 0; /* Prevent entering the while belove if we don't flush. */
-		//如果buf中的数据太大，那么还要进行flush操作
+        len = 0; /* Prevent entering the while belove if we don't flush.(避免进入下面的while循环里面去，因为如果buf中数据不是很多的话就没必要急着写到目标去) */
+		//如果buf中的数据太大，那么还要进行flush操作，强制把r->io.fdset.buf中所有的数据写入到目标中去，清空buf中的数据
         if (sdslen(r->io.fdset.buf) > REDIS_IOBUF_LEN) doflush = 1;
     }
-
+	//如果doflush为真，则刷新r->io.fdset.buf的数据到目标设备中去
     if (doflush) {
+		//注意这里的p的值改变了
         p = (unsigned char*) r->io.fdset.buf;
         len = sdslen(r->io.fdset.buf);
     }
@@ -232,7 +234,8 @@ static size_t rioFdsetWrite(rio *r, const void *buf, size_t len) {
             if (nwritten != count) {
                 /* Mark this FD as broken. */
                 r->io.fdset.state[j] = errno;
-                if (r->io.fdset.state[j] == 0) r->io.fdset.state[j] = EIO;
+				//如果state[j]==0,则表示是其他错误，不是ETIMEOUT
+                if (r->io.fdset.state[j] == 0) r->io.fdset.state[j] = EIO; /* EIO的意思是:A low-level I/O error occurred while modifying the inode. */
             }
         }
         if (broken == r->io.fdset.numfds) return 0; /* All the FDs in error. */
@@ -240,7 +243,7 @@ static size_t rioFdsetWrite(rio *r, const void *buf, size_t len) {
         len -= count;
         r->io.fdset.pos += count;
     }
-
+	//清空buf中的数据
     if (doflush) sdsclear(r->io.fdset.buf);
     return 1;
 }

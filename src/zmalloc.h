@@ -58,7 +58,10 @@
 #elif defined(__APPLE__)
 #include <malloc/malloc.h>
 #define HAVE_MALLOC_SIZE 1
-#define zmalloc_size(p) malloc_size(p)
+/* The malloc_size(ptr) function returns the size of the memory block that backs the allocation pointed to by ptr. 
+ * malloc_size()函数返回存储ptr指向的内存的内存块大小
+ */
+#define zmalloc_size(p) malloc_size(p)	
 #endif
 //只有在定义了自己需要内存分配库才会定义了HAVE_MALLOC_SIZE
 #ifndef ZMALLOC_LIB

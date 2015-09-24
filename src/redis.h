@@ -241,7 +241,7 @@ typedef long long mstime_t; /* millisecond time type. */
                                   server.unblocked_clients */
 #define REDIS_LUA_CLIENT (1<<8) /* This is a non connected client used by Lua */
 #define REDIS_ASKING (1<<9)     /* Client issued the ASKING command */
-#define REDIS_CLOSE_ASAP (1<<10)/* Close this client ASAP */
+#define REDIS_CLOSE_ASAP (1<<10)/* Close this client ASAP(尽快地关闭client) */
 #define REDIS_UNIX_SOCKET (1<<11) /* Client connected via Unix domain socket */
 #define REDIS_DIRTY_EXEC (1<<12)  /* EXEC will fail for errors while queueing */
 #define REDIS_MASTER_FORCE_REPLY (1<<13)  /* Queue replies even if is master(强迫master节点接收回复消息) */
@@ -532,13 +532,13 @@ typedef struct redisClient {
     unsigned long reply_bytes; /* Tot bytes of objects in reply list */
     int sentlen;            /* Amount of bytes already sent in the current
                                buffer or object being sent. */
-    time_t ctime;           /* Client creation time */
+    time_t ctime;           /* Client creation time(client的创建时间) */
     time_t lastinteraction; /* time of the last interaction(最后一次该client和server进行交互的时间), used for timeout */
     time_t obuf_soft_limit_reached_time;
     int flags;              /* REDIS_SLAVE | REDIS_MONITOR | REDIS_MULTI ... */
     int authenticated;      /* when requirepass is non-NULL */
     int replstate;          /* replication state if this is a slave */
-    int repl_put_online_on_ack; /* Install slave write handler on ACK. */
+    int repl_put_online_on_ack; /* Install slave write handler on ACK.(在收到ACK的时候安装slave写处理函数，这个函数把数据写到slave中去) */
     int repldbfd;           /* replication DB file descriptor */
     off_t repldboff;        /* replication DB file offset */
     off_t repldbsize;       /* replication DB file size */

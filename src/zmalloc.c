@@ -44,13 +44,14 @@ void zlibc_free(void *ptr) {
 #include "config.h"
 #include "zmalloc.h"
 
+//如果HAVE_MALLOC_SIZE定义了 说明系统使用tcmalloc或者jemalloc或者apple下面的malloc/malloc.h来分配内存，否则如果未定义则使用glibc的malloc函数来分配内存
 #ifdef HAVE_MALLOC_SIZE
 #define PREFIX_SIZE (0)
 #else
 #if defined(__sun) || defined(__sparc) || defined(__sparc__)
-#define PREFIX_SIZE (sizeof(long long))
+#define PREFIX_SIZE (sizeof(long long)) /* 使用libc的malloc函数我们要分配额外的内存来保存大小，在这几个平台会额外分配sizeof(long long)个字节来存放大小 */
 #else
-#define PREFIX_SIZE (sizeof(size_t))
+#define PREFIX_SIZE (sizeof(size_t)) /* 使用libc的malloc函数我们要分配额外的内存来保存大小，在这几个平台会额外分配sizeof(size_t)个字节来存放大小 */
 #endif
 #endif
 
