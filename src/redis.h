@@ -236,7 +236,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_MULTI (1<<3)   /* This client is in a MULTI context */
 #define REDIS_BLOCKED (1<<4) /* The client is waiting in a blocking operation */
 #define REDIS_DIRTY_CAS (1<<5) /* Watched keys modified. EXEC will fail. */
-#define REDIS_CLOSE_AFTER_REPLY (1<<6) /* Close after writing entire reply.(在把reply写到client后，关闭这个client) */
+#define REDIS_CLOSE_AFTER_REPLY (1<<6) /* Close after writing entire reply.(在把输出缓冲区中的数据全写到client后，关闭这个client) */
 #define REDIS_UNBLOCKED (1<<7) /* This client was unblocked and is stored in
                                   server.unblocked_clients */
 #define REDIS_LUA_CLIENT (1<<8) /* This is a non connected client used by Lua */
@@ -526,7 +526,7 @@ typedef struct redisClient {
     robj **argv;
     struct redisCommand *cmd, *lastcmd;
     int reqtype;
-    int multibulklen;       /* number of multi bulk arguments left to read */
+    int multibulklen;       /* number of multi bulk arguments left to read(multi bulk request中剩余参数的数量) */
     long bulklen;           /* length of bulk argument in multi bulk request */
     list *reply;
     unsigned long reply_bytes; /* Tot bytes of objects in reply list */

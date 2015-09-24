@@ -67,6 +67,7 @@ static struct {
 #define SPT_MIN(a, b) (((a) < (b))? (a) : (b))
 #endif
 
+//返回a和b两者中较小的那个
 static inline size_t spt_min(size_t a, size_t b) {
 	return SPT_MIN(a, b);
 } /* spt_min() */
@@ -78,6 +79,10 @@ static inline size_t spt_min(size_t a, size_t b) {
  */
 static int spt_clearenv(void) {
 #if __GLIBC__
+/* The clearenv() function clears the environment of all name-value
+   pairs and sets the value of the external variable environ to NULL.
+ */
+ //如果支持clearenv()函数的话就用该函数，否则手动清除环境列表
 	clearenv();
 
 	return 0;
@@ -95,7 +100,7 @@ static int spt_clearenv(void) {
 #endif
 } /* spt_clearenv() */
 
-
+//复制环境变量:把oldenv里面的环境变量复制给系统环境变量
 static int spt_copyenv(char *oldenv[]) {
 	extern char **environ;
 	char *eq;
@@ -103,7 +108,7 @@ static int spt_copyenv(char *oldenv[]) {
 
 	if (environ != oldenv)
 		return 0;
-
+	//先清空系统环境变量
 	if ((error = spt_clearenv()))
 		goto error;
 
@@ -126,7 +131,7 @@ error:
 	return error;
 } /* spt_copyenv() */
 
-
+//复制argv里面的数据，然后把新的数据的地址又保存在argv里面
 static int spt_copyargs(int argc, char *argv[]) {
 	char *tmp;
 	int i;
@@ -149,13 +154,15 @@ void spt_init(int argc, char *argv[]) {
         char **envp = environ;
 	char *base, *end, *nul, *tmp;
 	int i, error;
-
+	
+	//取得arv[0]里面的地址
 	if (!(base = argv[0]))
 		return;
-
-	nul = &base[strlen(base)];
+	//nul指向'\0'的地址
+	nul = &base[strlen(base)];	/* strlen计算的长度不包括'\0'字符 */
 	end = nul + 1;
 
+	//下面两个for循环的目的是取得环境变量和参数变量存放的地址的最末端地址
 	for (i = 0; i < argc || (i >= argc && argv[i]); i++) {
 		if (!argv[i] || argv[i] < end)
 			continue;
@@ -169,7 +176,7 @@ void spt_init(int argc, char *argv[]) {
 
 		end = envp[i] + strlen(envp[i]) + 1;
 	}
-
+	//复制argv[0]里面的数据
 	if (!(SPT.arg0 = strdup(argv[0])))
 		goto syerr;
 
@@ -190,7 +197,8 @@ void spt_init(int argc, char *argv[]) {
 	setprogname(tmp);
 #endif
 
-
+//下面两句话是把原先的环境变量复制到其他地方去，空出原先环境变量占用的内存，空出来的这块内存会给setproctitle用来设置进程的名字
+//而argv和envrion会指向复制的目的地址，这样保证程序能还够正常得到环境变量
 	if ((error = spt_copyenv(envp)))
 		goto error;
 
@@ -212,7 +220,7 @@ error:
 #ifndef SPT_MAXTITLE
 #define SPT_MAXTITLE 255
 #endif
-
+//更具fmt的格式，设置进程的名字
 void setproctitle(const char *fmt, ...) {
 	char buf[SPT_MAXTITLE + 1]; /* use buffer in case argv[0] is passed */
 	va_list ap;

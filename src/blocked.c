@@ -129,6 +129,7 @@ void processUnblockedClients(void) {
 
 /* Unblock a client calling the right function depending on the kind
  * of operation the client is blocking for. */
+//解除c的阻塞，根据阻塞在不同的操作上，调用不同的函数来解除阻塞
 void unblockClient(redisClient *c) {
     if (c->btype == REDIS_BLOCKED_LIST) {
         unblockClientWaitingData(c);

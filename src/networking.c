@@ -735,7 +735,7 @@ void freeClient(redisClient *c) {
      *
      * Note that before doing this we make sure that the client is not in
      * some unexpected state, by checking its flags. */
-    /* 如果当前client代表的是master节点，我们必须确保缓冲一些状态，为了以后可以进行部分同步操作
+    /* 如果当前client代表的是master节点，我们必须确保保存一些状态，为了以后可以进行部分同步操作
      */
     if (server.master && c->flags & REDIS_MASTER) {
         redisLog(REDIS_WARNING,"Connection with master lost.");
@@ -743,7 +743,8 @@ void freeClient(redisClient *c) {
                           REDIS_CLOSE_ASAP|
                           REDIS_BLOCKED|
                           REDIS_UNBLOCKED)))
-        {
+        {	
+        	//缓存c到server->cached_master然后把c从server中删除
             replicationCacheMaster(c);
             return;
         }
@@ -759,7 +760,7 @@ void freeClient(redisClient *c) {
     sdsfree(c->querybuf);
     c->querybuf = NULL;
 
-    /* Deallocate structures used to block on blocking ops. */
+    /* Deallocate(解除分配) structures used to block on blocking ops. */
     if (c->flags & REDIS_BLOCKED) unblockClient(c);
     dictRelease(c->bpop.keys);
 
@@ -800,6 +801,9 @@ void freeClient(redisClient *c) {
 
     /* Master/slave cleanup Case 1:
      * we lost the connection with a slave. */
+    /* Master/slave 清除情况1:
+     * 我们失去了和一个slave的连接
+     */
     if (c->flags & REDIS_SLAVE) {
         if (c->replstate == REDIS_REPL_SEND_BULK) {
             if (c->repldbfd != -1) close(c->repldbfd);
@@ -819,6 +823,9 @@ void freeClient(redisClient *c) {
 
     /* Master/slave cleanup Case 2:
      * we lost the connection with the master. */
+    /* Master/slave 清除情况2:
+     * 我们失去了和master的连接
+     */
     if (c->flags & REDIS_MASTER) replicationHandleMasterDisconnection();
 
     /* If this client was scheduled for async freeing we need to remove it
@@ -842,13 +849,15 @@ void freeClient(redisClient *c) {
  * This function is useful when we need to terminate a client but we are in
  * a context where calling freeClient() is not possible, because the client
  * should be valid for the continuation of the flow of the program. */
+//把这个client添加到clients_to_close中，异步地删除它
 void freeClientAsync(redisClient *c) {
     if (c->flags & REDIS_CLOSE_ASAP || c->flags & REDIS_LUA_CLIENT) return;
     c->flags |= REDIS_CLOSE_ASAP;
     listAddNodeTail(server.clients_to_close,c);
 }
-
+//删除再异步删除队列中的client
 void freeClientsInAsyncFreeQueue(void) {
+	//遍历异步删除队列中的每一个client
     while (listLength(server.clients_to_close)) {
         listNode *ln = listFirst(server.clients_to_close);
         redisClient *c = listNodeValue(ln);
@@ -858,7 +867,7 @@ void freeClientsInAsyncFreeQueue(void) {
         listDelNode(server.clients_to_close,ln);
     }
 }
-
+//把client中的输出缓冲区的reply数据发送给client
 void sendReplyToClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     redisClient *c = privdata;
     int nwritten = 0, totwritten = 0, objlen;
@@ -866,8 +875,9 @@ void sendReplyToClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     robj *o;
     REDIS_NOTUSED(el);
     REDIS_NOTUSED(mask);
-
+	//检测c->buf或者c->reply是否为空，如果不为空，说明缓冲区中去数据要发送
     while(c->bufpos > 0 || listLength(c->reply)) {
+		//发送c->buf中的数据
         if (c->bufpos > 0) {
             nwritten = write(fd,c->buf+c->sentlen,c->bufpos-c->sentlen);
             if (nwritten <= 0) break;
@@ -881,6 +891,7 @@ void sendReplyToClient(aeEventLoop *el, int fd, void *privdata, int mask) {
                 c->sentlen = 0;
             }
         } else {
+        //发送c->reply中的数据
             o = listNodeValue(listFirst(c->reply));
             objlen = sdslen(o->ptr);
             objmem = getStringObjectSdsUsedMemory(o);
@@ -897,6 +908,9 @@ void sendReplyToClient(aeEventLoop *el, int fd, void *privdata, int mask) {
             totwritten += nwritten;
 
             /* If we fully sent the object on head go to the next one */
+			/* 如果一个对象中的数据完全发送出去了，则前进到下一个对象，
+			 * 把当前的对象从reply中删除，这样下次进行listFirst的时候就前进到下一个对象了
+			 */
             if (c->sentlen == objlen) {
                 listDelNode(c->reply,listFirst(c->reply));
                 c->sentlen = 0;
@@ -912,6 +926,11 @@ void sendReplyToClient(aeEventLoop *el, int fd, void *privdata, int mask) {
          * However if we are over the maxmemory limit we ignore that and
          * just deliver as much data as it is possible to deliver. */
         server.stat_net_output_bytes += totwritten;
+		/* 如果当前发送的数据大于REDIS_MAX_WRITE_PER_EVENT则应该停止发送了，避免服务一个client太久，
+		 * 造成其他client等候太久
+		 * 但是如果我们目前使用的内存已经超出maxmemory了，那么忽略上面说的，我们把能发送的数据全发送出去
+		 * 这样可以回收输出缓冲区中占用的内存
+		 */
         if (totwritten > REDIS_MAX_WRITE_PER_EVENT &&
             (server.maxmemory == 0 ||
              zmalloc_used_memory() < server.maxmemory)) break;
@@ -948,6 +967,7 @@ void sendReplyToClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         aeDeleteFileEvent(server.el,c->fd,AE_WRITABLE);
 
         /* Close connection after entire reply has been sent. */
+		//如果设置了REDIS_CLOSE_AFTER_REPLY则关闭client，前提是输出缓冲区的数据全部发送出去了
         if (c->flags & REDIS_CLOSE_AFTER_REPLY) freeClient(c);
     }
 }
@@ -966,7 +986,7 @@ void resetClient(redisClient *c) {
     if (!(c->flags & REDIS_MULTI) && prevcmd != askingCommand)
         c->flags &= (~REDIS_ASKING);
 }
-
+//处理请求类型为Inline的命令
 int processInlineBuffer(redisClient *c) {
     char *newline;
     int argc, j;
@@ -974,6 +994,7 @@ int processInlineBuffer(redisClient *c) {
     size_t querylen;
 
     /* Search for end of line */
+	//找到'\n'所在的位置
     newline = strchr(c->querybuf,'\n');
 
     /* Nothing to do without a \r\n */
@@ -1040,7 +1061,7 @@ static void setProtocolError(redisClient *c, int pos) {
     c->flags |= REDIS_CLOSE_AFTER_REPLY;
     sdsrange(c->querybuf,pos,-1);
 }
-//这个函数的作用时解析命令存放到argv里面去
+//这个函数的作用是解析命令存放到argv里面去
 int processMultibulkBuffer(redisClient *c) {
     char *newline = NULL;
     int pos = 0, ok;
@@ -1179,7 +1200,7 @@ int processMultibulkBuffer(redisClient *c) {
     /* Still not read to process the command */
     return REDIS_ERR;
 }
-//这个函数的作用是处理client中querybuf中的数据
+//这个函数的作用是处理client中querybuf中的请求数据的
 void processInputBuffer(redisClient *c) {
     /* Keep processing while there is something in the input buffer */
     while(sdslen(c->querybuf)) {
@@ -1221,8 +1242,9 @@ void processInputBuffer(redisClient *c) {
                 resetClient(c);
         }
     }
+
 }
-//和fd关联的事件处理函数，用来读取fd中的请求
+//和fd关联的事件处理函数，用来读取fd中的请求，每次了client发送来了请求这个函数会被调用
 void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     redisClient *c = (redisClient*) privdata;
     int nread, readlen;
@@ -1245,7 +1267,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
 
         if (remaining < readlen) readlen = remaining;
     }
-
+	//qblen表示目前querybuf中已有请求数据的长度
     qblen = sdslen(c->querybuf);
     if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;
 	//readlen为需要读取的字节数大小，下面这句话的意思是调整buff的大小以便能读取readlen字节的数据
@@ -1255,16 +1277,19 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         if (errno == EAGAIN) {
             nread = 0;
         } else {
+        //读出错
             redisLog(REDIS_VERBOSE, "Reading from client: %s",strerror(errno));
             freeClient(c);
             return;
         }
     } else if (nread == 0) {
+    //client已经关闭了连接
         redisLog(REDIS_VERBOSE, "Client closed connection");
         freeClient(c);
         return;
     }
     if (nread) {
+		//进行到这里说明从fd中读到了一些请求数据了
         sdsIncrLen(c->querybuf,nread);
         c->lastinteraction = server.unixtime;
         if (c->flags & REDIS_MASTER) c->reploff += nread;
