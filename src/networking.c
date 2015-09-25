@@ -1072,7 +1072,9 @@ int processMultibulkBuffer(redisClient *c) {
         redisAssertWithInfo(c,NULL,c->argc == 0);
 
         /* Multi bulk length cannot be read without a \r\n */
+		//确保首先能够读取到multi bulk length
         newline = strchr(c->querybuf,'\r');
+		//如果没读取到，说明client还未传过来
         if (newline == NULL) {
             if (sdslen(c->querybuf) > REDIS_INLINE_MAX_SIZE) {
                 addReplyError(c,"Protocol error: too big mbulk count string");
@@ -1092,6 +1094,7 @@ int processMultibulkBuffer(redisClient *c) {
         ok = string2ll(c->querybuf+1,newline-(c->querybuf+1),&ll);
         if (!ok || ll > 1024*1024) {
             addReplyError(c,"Protocol error: invalid multibulk length");
+			//setProtocolError这个函数会把c->querybuf清空
             setProtocolError(c,pos);
             return REDIS_ERR;
         }
@@ -1112,6 +1115,7 @@ int processMultibulkBuffer(redisClient *c) {
     redisAssertWithInfo(c,NULL,c->multibulklen > 0);
     while(c->multibulklen) {
         /* Read bulk length if unknown */
+		//bulklen的初始值为-1，所以如果检查到bulklen==-1说明一个bulk的长度还没有读取到
         if (c->bulklen == -1) {
             newline = strchr(c->querybuf+pos,'\r');
             if (newline == NULL) {
@@ -1125,6 +1129,7 @@ int processMultibulkBuffer(redisClient *c) {
             }
 
             /* Buffer should also contain \n */
+			//如果下面这句话成立，那么说明此时querybuf中还没有'\n'字符，说明还未读入
             if (newline-(c->querybuf) > ((signed)sdslen(c->querybuf)-2))
                 break;
 
@@ -1142,7 +1147,7 @@ int processMultibulkBuffer(redisClient *c) {
                 setProtocolError(c,pos);
                 return REDIS_ERR;
             }
-
+			
             pos += newline-(c->querybuf+pos)+2;
             if (ll >= REDIS_MBULK_BIG_ARG) {
                 size_t qblen;
@@ -1163,8 +1168,10 @@ int processMultibulkBuffer(redisClient *c) {
         }
 
         /* Read bulk argument */
+		//读取目前bulk对应的参数
         if (sdslen(c->querybuf)-pos < (unsigned)(c->bulklen+2)) {
             /* Not enough data (+2 == trailing \r\n) */
+			//没有足够的数据可供读，直接退出循环
             break;
         } else {
             /* Optimization: if the buffer contains JUST our bulk element
@@ -1186,6 +1193,7 @@ int processMultibulkBuffer(redisClient *c) {
                     createStringObject(c->querybuf+pos,c->bulklen);
                 pos += c->bulklen+2;
             }
+			//到这里表明参数读取到了一个参数
             c->bulklen = -1;
             c->multibulklen--;
         }
@@ -1259,10 +1267,12 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
      * buffer contains exactly the SDS string representing the object, even
      * at the risk of requiring more read(2) calls. This way the function
      * processMultiBulkBuffer() can avoid copying buffers to create the
-     * Redis Object representing the argument. */
+     * Redis Object representing the argument. 
+     */
     if (c->reqtype == REDIS_REQ_MULTIBULK && c->multibulklen && c->bulklen != -1
         && c->bulklen >= REDIS_MBULK_BIG_ARG)
     {
+    	//进入到这里表明
         int remaining = (unsigned)(c->bulklen+2)-sdslen(c->querybuf);
 
         if (remaining < readlen) readlen = remaining;
