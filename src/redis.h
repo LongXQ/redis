@@ -240,7 +240,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_UNBLOCKED (1<<7) /* This client was unblocked and is stored in
                                   server.unblocked_clients */
 #define REDIS_LUA_CLIENT (1<<8) /* This is a non connected client used by Lua */
-#define REDIS_ASKING (1<<9)     /* Client issued the ASKING command */
+#define REDIS_ASKING (1<<9)     /* Client issued the ASKING command(表明client请求了ASKING命令) */
 #define REDIS_CLOSE_ASAP (1<<10)/* Close this client ASAP(尽快地关闭client) */
 #define REDIS_UNIX_SOCKET (1<<11) /* Client connected via Unix domain socket */
 #define REDIS_DIRTY_EXEC (1<<12)  /* EXEC will fail for errors while queueing */

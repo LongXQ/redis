@@ -983,6 +983,7 @@ void resetClient(redisClient *c) {
     c->bulklen = -1;
     /* We clear the ASKING flag as well if we are not inside a MULTI, and
      * if what we just executed is not the ASKING command itself. */
+    //清除REDIS_ASKING标志
     if (!(c->flags & REDIS_MULTI) && prevcmd != askingCommand)
         c->flags &= (~REDIS_ASKING);
 }
@@ -1101,6 +1102,7 @@ int processMultibulkBuffer(redisClient *c) {
 
         pos = (newline-c->querybuf)+2;
         if (ll <= 0) {
+			//如果得到的ll<=0，说明请求命令的的形式是:"*0\r\n"或者是诸如"*-1\r\n"的形式的，说明请求命令的参数全部取出来了，直接返回REDIS_OK
             sdsrange(c->querybuf,pos,-1);
             return REDIS_OK;
         }
@@ -1132,7 +1134,7 @@ int processMultibulkBuffer(redisClient *c) {
 			//如果下面这句话成立，那么说明此时querybuf中还没有'\n'字符，说明还未读入
             if (newline-(c->querybuf) > ((signed)sdslen(c->querybuf)-2))
                 break;
-
+			//正确的格式应该是"$bulklen..."
             if (c->querybuf[pos] != '$') {
                 addReplyErrorFormat(c,
                     "Protocol error: expected '$', got '%c'",
@@ -1200,9 +1202,11 @@ int processMultibulkBuffer(redisClient *c) {
     }
 
     /* Trim to pos */
+	//释放pos之前的内存，因为已经读取到了
     if (pos) sdsrange(c->querybuf,pos,-1);
 
     /* We're done when c->multibulk == 0 */
+	//当multibulklen==0说明这个multi bulk requerst已经成功的从querybuf中都出来了，以通知调用这个函数的调用者可以进行命令处理了
     if (c->multibulklen == 0) return REDIS_OK;
 
     /* Still not read to process the command */
@@ -1246,6 +1250,7 @@ void processInputBuffer(redisClient *c) {
             resetClient(c);
         } else {
             /* Only reset the client when the command was executed. */
+			//执行完命令后重置client
             if (processCommand(c) == REDIS_OK)
                 resetClient(c);
         }
@@ -1323,7 +1328,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     processInputBuffer(c);
     server.current_client = NULL;
 }
-
+//取得当前clients中最大的输出缓冲区reply的长度和最大的输入缓冲区querybuf的长度
 void getClientsMaxBuffers(unsigned long *longest_output_list,
                           unsigned long *biggest_input_buffer) {
     redisClient *c;
@@ -1354,6 +1359,7 @@ void formatPeerId(char *peerid, size_t peerid_len, char *ip, int port) {
 }
 
 /* A Redis "Peer ID" is a colon separated ip:port pair.
+ * 一个Redis "Peer ID"是一个用:分隔的ip:port对
  * For IPv4 it's in the form x.y.z.k:port, example: "127.0.0.1:1234".
  * For IPv6 addresses we use [] around the IP part, like in "[::1]:1234".
  * For Unix sockets we use path:0, like in "/tmp/redis:0".
@@ -1396,8 +1402,9 @@ char *getClientPeerId(redisClient *c) {
     return c->peerid;
 }
 
-/* Concatenate a string representing the state of a client in an human
+/* Concatenate(连接，串接) a string representing the state of a client in an human
  * readable format, into the sds string 's'. */
+//串接一个string用一种友好的格式来表示一个client的状态
 sds catClientInfoString(sds s, redisClient *client) {
     char flags[16], events[3], *p;
     int emask;
@@ -1447,7 +1454,7 @@ sds catClientInfoString(sds s, redisClient *client) {
         events,
         client->lastcmd ? client->lastcmd->name : "NULL");
 }
-
+//得到所有client的状态信息
 sds getAllClientsInfoString(void) {
     listNode *ln;
     listIter li;
@@ -1463,20 +1470,23 @@ sds getAllClientsInfoString(void) {
     }
     return o;
 }
-
+/* CLIENT系列命令的实现:
+ * CLIENT LIST/KILL/PAUSE/GETNAME/SETNAME
+ */
 void clientCommand(redisClient *c) {
     listNode *ln;
     listIter li;
     redisClient *client;
 
     if (!strcasecmp(c->argv[1]->ptr,"list") && c->argc == 2) {
-        /* CLIENT LIST */
+        /* CLIENT LIST命令的实现 */
         sds o = getAllClientsInfoString();
         addReplyBulkCBuffer(c,o,sdslen(o));
         sdsfree(o);
     } else if (!strcasecmp(c->argv[1]->ptr,"kill")) {
         /* CLIENT KILL <ip:port>
          * CLIENT KILL <option> [value] ... <option> [value] */
+        //CLIENT KILL命令的实现
         char *addr = NULL;
         int type = -1;
         uint64_t id = 0;
@@ -1563,7 +1573,8 @@ void clientCommand(redisClient *c) {
          * only after we queued the reply to its output buffers. */
         if (close_this_client) c->flags |= REDIS_CLOSE_AFTER_REPLY;
     } else if (!strcasecmp(c->argv[1]->ptr,"setname") && c->argc == 3) {
-        int j, len = sdslen(c->argv[2]->ptr);
+		//CLIENT SETNAME命令的实现
+		int j, len = sdslen(c->argv[2]->ptr);
         char *p = c->argv[2]->ptr;
 
         /* Setting the client name to an empty string actually removes
@@ -1591,11 +1602,13 @@ void clientCommand(redisClient *c) {
         incrRefCount(c->name);
         addReply(c,shared.ok);
     } else if (!strcasecmp(c->argv[1]->ptr,"getname") && c->argc == 2) {
+    	//CLIENT GETNAME命令的实现
         if (c->name)
             addReplyBulk(c,c->name);
         else
             addReply(c,shared.nullbulk);
     } else if (!strcasecmp(c->argv[1]->ptr,"pause") && c->argc == 3) {
+    	//CLIENT PAUSE命令的实现
         long long duration;
 
         if (getTimeoutFromObjectOrReply(c,c->argv[2],&duration,UNIT_MILLISECONDS)
