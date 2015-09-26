@@ -179,6 +179,9 @@ void disconnectAllBlockedClients(void) {
                 "-UNBLOCKED force unblock from blocking operation, "
                 "instance state changed (master -> slave?)\r\n"));
             unblockClient(c);
+			/* 设置REDIS_CLOSE_AFTER_REPLY标志，在把输出缓冲区的内存给client后关闭client，并且在设置了
+			 * 这个标志后，client不再处理任何命令，也不再往输出缓冲区中新增数据
+			 */
             c->flags |= REDIS_CLOSE_AFTER_REPLY;
         }
     }

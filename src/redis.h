@@ -236,12 +236,12 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REDIS_MULTI (1<<3)   /* This client is in a MULTI context */
 #define REDIS_BLOCKED (1<<4) /* The client is waiting in a blocking operation */
 #define REDIS_DIRTY_CAS (1<<5) /* Watched keys modified. EXEC will fail. */
-#define REDIS_CLOSE_AFTER_REPLY (1<<6) /* Close after writing entire reply.(在把输出缓冲区中的数据全写到client后，关闭这个client) */
+#define REDIS_CLOSE_AFTER_REPLY (1<<6) /* Close after writing entire reply.(在把输出缓冲区中的数据全写到client后，关闭这个client,当这个标志被设置的时候，不再处理任何新的命令也不再往输出缓冲区中新增加东西) */
 #define REDIS_UNBLOCKED (1<<7) /* This client was unblocked and is stored in
                                   server.unblocked_clients */
 #define REDIS_LUA_CLIENT (1<<8) /* This is a non connected client used by Lua */
 #define REDIS_ASKING (1<<9)     /* Client issued the ASKING command(表明client请求了ASKING命令) */
-#define REDIS_CLOSE_ASAP (1<<10)/* Close this client ASAP(尽快地关闭client) */
+#define REDIS_CLOSE_ASAP (1<<10)/* Close this client ASAP(尽快地关闭client，这个标志一般用在异步关闭client上) */
 #define REDIS_UNIX_SOCKET (1<<11) /* Client connected via Unix domain socket */
 #define REDIS_DIRTY_EXEC (1<<12)  /* EXEC will fail for errors while queueing */
 #define REDIS_MASTER_FORCE_REPLY (1<<13)  /* Queue replies even if is master(强迫master节点接收回复消息) */

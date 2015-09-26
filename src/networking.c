@@ -216,7 +216,10 @@ robj *dupLastObjectIfNeeded(list *reply) {
 int _addReplyToBuffer(redisClient *c, char *s, size_t len) {
 	//计算buf中目前可用的空间
     size_t available = sizeof(c->buf)-c->bufpos;
-
+	
+	/* 设置REDIS_CLOSE_AFTER_REPLY标志，在设置了
+	 * 这个标志后，client不再处理任何命令，也不再往输出缓冲区中新增数据
+	 */
     if (c->flags & REDIS_CLOSE_AFTER_REPLY) return REDIS_OK;
 
     /* If there already are entries in the reply list, we cannot
@@ -234,7 +237,10 @@ int _addReplyToBuffer(redisClient *c, char *s, size_t len) {
 //把对象o添加到c->reply中去
 void _addReplyObjectToList(redisClient *c, robj *o) {
     robj *tail;
-
+	
+	/* 设置REDIS_CLOSE_AFTER_REPLY标志，在设置了
+	 * 这个标志后，client不再处理任何命令，也不再往输出缓冲区中新增数据
+	 */
     if (c->flags & REDIS_CLOSE_AFTER_REPLY) return;
 
     if (listLength(c->reply) == 0) {
@@ -268,7 +274,10 @@ void _addReplyObjectToList(redisClient *c, robj *o) {
  * needed it will be free'd, otherwise it ends up in a robj. */
 void _addReplySdsToList(redisClient *c, sds s) {
     robj *tail;
-
+	
+	/* 设置REDIS_CLOSE_AFTER_REPLY标志，在设置了
+	 * 这个标志后，client不再处理任何命令，也不再往输出缓冲区中新增数据
+	 */
     if (c->flags & REDIS_CLOSE_AFTER_REPLY) {
         sdsfree(s);
         return;
@@ -967,7 +976,7 @@ void sendReplyToClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         aeDeleteFileEvent(server.el,c->fd,AE_WRITABLE);
 
         /* Close connection after entire reply has been sent. */
-		//如果设置了REDIS_CLOSE_AFTER_REPLY则关闭client，前提是输出缓冲区的数据全部发送出去了
+		//如果设置了REDIS_CLOSE_AFTER_REPLY并且输出缓冲区中已经没有数据了那么关闭client
         if (c->flags & REDIS_CLOSE_AFTER_REPLY) freeClient(c);
     }
 }
@@ -1059,6 +1068,10 @@ static void setProtocolError(redisClient *c, int pos) {
             "Protocol error from client: %s", client);
         sdsfree(client);
     }
+	/* 出现了错误，设置REDIS_CLOSE_AFTER_REPLY标志，
+	 * 表明client不再处理新的命令和增加任何内容到输出缓冲区中，
+	 * 并且在输出缓冲区里面的内容发送给client后关闭该client
+	 */
     c->flags |= REDIS_CLOSE_AFTER_REPLY;
     sdsrange(c->querybuf,pos,-1);
 }
@@ -1225,6 +1238,7 @@ void processInputBuffer(redisClient *c) {
         /* REDIS_CLOSE_AFTER_REPLY closes the connection once the reply is
          * written to the client. Make sure to not let the reply grow after
          * this flag has been set (i.e. don't process more commands). */
+        //如果设置了REDIS_CLOSE_AFTER_REPLY则不处理任何命令了
         if (c->flags & REDIS_CLOSE_AFTER_REPLY) return;
 
         /* Determine request type when unknown. */
